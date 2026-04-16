@@ -1,0 +1,138 @@
+from __future__ import annotations
+
+import json
+import time
+import urllib.request
+import urllib.parse
+from pathlib import Path
+
+from .models import SourceConfig
+
+
+def fetch_text(source: SourceConfig, fixtures_dir: Path, timeout: int = 60) -> str:
+    url = source.url
+    if url.startswith("fixture://"):
+        rel = url[len("fixture://"):]
+        return (fixtures_dir / rel).read_text(encoding="utf-8")
+
+    req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0", "Accept": "text/html,application/json,*/*"})
+    with urllib.request.urlopen(req, timeout=timeout) as resp:
+        raw = resp.read()
+        charset = resp.headers.get_content_charset() or "utf-8"
+    return raw.decode(charset, errors="replace")
+
+
+def fetch_json(source: SourceConfig, fixtures_dir: Path, timeout: int = 30) -> dict:
+    return json.loads(fetch_text(source, fixtures_dir=fixtures_dir, timeout=timeout))
+
+
+def fetch_openreview_api_v2(
+    group: str,
+    accepted_venue_prefixes: list[str],
+    timeout: int = 60,
+    page_size: int = 1000,
+) -> dict:
+    """Paginate through OpenReview API v2 search endpoint and return accepted notes.
+
+    Uses /notes/search?query=*&group=<group> with offset pagination.
+    Filters notes whose content.venue.value starts with any of accepted_venue_prefixes.
+    Returns a dict compatible with openreview_notes_json parser: {"notes": [...]}.
+    """
+    base = "https://api2.openreview.net/notes/search"
+    all_notes: list[dict] = []
+    offset = 0
+    total = None
+
+    while True:
+        params = urllib.parse.urlencode({
+            "query": "*",
+            "group": group,
+            "limit": page_size,
+            "offset": offset,
+        })
+        url = f"{base}?{params}"
+        req = urllib.request.Request(url, headers={
+            "User-Agent": "resmax-accepted-index/1.0",
+            "Accept": "application/json",
+        })
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            raw = resp.read()
+            charset = resp.headers.get_content_charset() or "utf-8"
+        data = json.loads(raw.decode(charset, errors="replace"))
+
+        notes = data.get("notes", [])
+        if total is None:
+            total = data.get("count", 0)
+            print(f"  [OpenReview] group={group}, total submissions={total}")
+
+        for note in notes:
+            venue = note.get("content", {}).get("venue", {}).get("value", "")
+            if any(venue.lower().startswith(p.lower()) for p in accepted_venue_prefixes):
+                all_notes.append(note)
+
+        offset += len(notes)
+        if not notes or offset >= total:
+            break
+        time.sleep(0.5)
+
+    print(f"  [OpenReview] accepted notes after filtering: {len(all_notes)}")
+    return {"notes": all_notes}
+
+
+def fetch_aaai_ojs_all_issues(
+    archive_url: str,
+    year_tag: str,
+    timeout: int = 60,
+) -> str:
+    """Fetch all AAAI OJS Technical Tracks issue pages for a given year and concatenate.
+
+    1. Fetches the archive page(s) to discover issue URLs matching year_tag (e.g. "AAAI-25").
+    2. Fetches each matching issue page.
+    3. Returns concatenated HTML of all issue pages.
+    """
+    import re as _re
+
+    def _get(url: str) -> str:
+        req = urllib.request.Request(url, headers={
+            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)",
+            "Accept": "text/html,*/*",
+        })
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            raw = resp.read()
+            charset = resp.headers.get_content_charset() or "utf-8"
+        return raw.decode(charset, errors="replace")
+
+    all_issue_urls: list[str] = []
+    page = 1
+    max_pages = 10
+    found_year = False
+    while page <= max_pages:
+        page_url = archive_url if page == 1 else f"{archive_url}/{page}"
+        html = _get(page_url)
+
+        issue_pattern = _re.compile(
+            r'<a\s+class="title"\s+href="(https://ojs\.aaai\.org/index\.php/AAAI/issue/view/\d+)">\s*'
+            + _re.escape(year_tag) + r'\s+Technical\s+Tracks',
+            _re.I | _re.S,
+        )
+        found = issue_pattern.findall(html)
+        all_issue_urls.extend(found)
+
+        if found:
+            found_year = True
+        elif found_year:
+            break
+
+        page += 1
+        time.sleep(0.3)
+
+    all_issue_urls = list(dict.fromkeys(all_issue_urls))
+    print(f"  [AAAI OJS] found {len(all_issue_urls)} Technical Tracks issues for {year_tag}")
+
+    combined_html = ""
+    for i, url in enumerate(all_issue_urls):
+        print(f"  [AAAI OJS] fetching issue {i+1}/{len(all_issue_urls)}: {url}")
+        combined_html += _get(url) + "\n"
+        time.sleep(0.3)
+
+    return combined_html

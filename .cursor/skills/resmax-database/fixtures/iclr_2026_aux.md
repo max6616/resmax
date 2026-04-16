@@ -1,0 +1,2 @@
+- [Flow Matching for Adaptive Planning](https://arxiv.org/abs/2601.00001) — arXiv
+- [Latent World Models for Long-Horizon Control](https://openreview.net/forum?id=iclr26_a2) — OpenReview
