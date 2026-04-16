@@ -1,0 +1,53 @@
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from typing import Optional
+
+
+@dataclass
+class SourceConfig:
+    kind: str
+    url: str
+    parser: str
+    expected_count: Optional[int] = None
+    parser_args: Optional[str] = None
+
+
+@dataclass
+class ConferenceYearConfig:
+    venue: str
+    year: int
+    conf_year: str
+    status: str
+    skip_reason: str
+    primary_source: SourceConfig
+    auxiliary_sources: list[SourceConfig] = field(default_factory=list)
+    notes: str = ""
+
+
+@dataclass
+class AcceptedPaperRecord:
+    paper_id: str = ""
+    short_id: str = ""
+    venue: str = ""
+    year: int = 0
+    conf_year: str = ""
+    title: str = ""
+    authors: str = ""
+    source_type: str = ""
+    source_url: str = ""
+    paper_link: str = ""
+    arxiv_id: str = ""
+    arxiv_url: str = ""
+    keywords_raw: str = ""
+    abstract_raw: str = ""
+    doi: str = ""
+    openreview_forum_id: str = ""
+    has_pdf_camera_ready: str = ""
+
+
+@dataclass
+class SourceRunResult:
+    source: SourceConfig
+    records: list[AcceptedPaperRecord] = field(default_factory=list)
+    errors: list[str] = field(default_factory=list)

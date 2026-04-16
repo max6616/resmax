@@ -1,0 +1,2 @@
+- [Compositional Video Policies with Diffusion Priors](https://arxiv.org/abs/2602.00002) — arXiv
+- [Benchmarking Embodied Agents under Long-Horizon Feedback](https://github.com/example/embodied-feedback) — project

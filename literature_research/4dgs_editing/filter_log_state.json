@@ -1,0 +1,541 @@
+{
+  "direction": "4D Gaussian Splatting for dynamic 3D scene editing and manipulation",
+  "keywords": [
+    "4DGS",
+    "4D Gaussian Splatting",
+    "dynamic scene editing",
+    "deformable Gaussian",
+    "dynamic 3D editing",
+    "temporal Gaussian",
+    "Gaussian splatting editing",
+    "dynamic NeRF editing",
+    "4D scene manipulation",
+    "space-time Gaussian"
+  ],
+  "start_time": 1776180505.676748,
+  "keyword_total_matches": 60,
+  "keyword_kept": 50,
+  "embedding_candidates": 50,
+  "embedding_cache_size": 49152,
+  "embedding_top_sim": 0.0,
+  "embedding_bottom_sim": 0.0,
+  "pre_dedup_total": 100,
+  "duplicates_removed": 18,
+  "merged_total": 82,
+  "source_keyword_only": 32,
+  "source_embedding_only": 32,
+  "source_both": 18,
+  "meta_has_abstract": 82,
+  "meta_has_pdf": 49,
+  "meta_missing_abstract": 0,
+  "meta_missing_pdf": 33,
+  "meta_errors": [],
+  "meta_enriched_by_arxiv_id": 0,
+  "meta_enriched_by_arxiv_search": 0,
+  "meta_enriched_by_s2_search": 0,
+  "scoring_results": [
+    {
+      "paper_id": "ACMMM_2025::d_gaussian_dynamic_control_with_discretized_3d_view_modeling_for_text_driven_3d_gaussian_splatting_editing",
+      "title": "D²Gaussian: Dynamic Control with Discretized 3D View Modeling for Text-Driven 3D Gaussian Splatting Editing",
+      "ai_score": "S",
+      "ai_reason": "Text-driven 3DGS editing with dynamic control."
+    },
+    {
+      "paper_id": "CVPR_2024::4d_gaussian_splatting_for_real_time_dynamic_scene_rendering",
+      "title": "4D Gaussian Splatting for Real-Time Dynamic Scene Rendering",
+      "ai_score": "S",
+      "ai_reason": "Foundational 4D-GS paper introducing core representation combining 3D Gaussians with 4D neural voxels for dynamic scene rendering. Primary baseline for any 4DGS editing work."
+    },
+    {
+      "paper_id": "CVPR_2025::ctrl_d_controllable_dynamic_3d_scene_editing_with_personalized_2d_diffusion",
+      "title": "CTRL-D: Controllable Dynamic 3D Scene Editing with Personalized 2D Diffusion",
+      "ai_score": "S",
+      "ai_reason": "Directly addresses controllable editing of dynamic 3D scenes."
+    },
+    {
+      "paper_id": "CVPR_2025::efficient_dynamic_scene_editing_via_4d_gaussian_based_static_dynamic_separation",
+      "title": "Efficient Dynamic Scene Editing via 4D Gaussian-based Static-Dynamic Separation",
+      "ai_score": "S",
+      "ai_reason": "Directly addresses efficient editing of 4D dynamic scenes using 4DGS with static-dynamic separation."
+    },
+    {
+      "paper_id": "CVPR_2024::instruct_4d_to_4d_editing_4d_scenes_as_pseudo_3d_scenes_using_2d_diffusion",
+      "title": "Instruct 4D-to-4D: Editing 4D Scenes as Pseudo-3D Scenes Using 2D Diffusion",
+      "ai_score": "S",
+      "ai_reason": "Directly addresses instruction-guided editing of 4D dynamic scenes."
+    },
+    {
+      "paper_id": "CVPR_2024::sc_gs_sparse_controlled_gaussian_splatting_for_editable_dynamic_scenes",
+      "title": "SC-GS: Sparse-Controlled Gaussian Splatting for Editable Dynamic Scenes",
+      "ai_score": "S",
+      "ai_reason": "Sparse-controlled GS for editable dynamic scenes, directly addresses dynamic GS editing."
+    },
+    {
+      "paper_id": "ECCV_2024::gaussctrl_multi_view_consistent_text_driven_3d_gaussian_splatting_editing",
+      "title": "GaussCtrl: Multi-View Consistent Text-Driven 3D Gaussian Splatting Editing",
+      "ai_score": "S",
+      "ai_reason": "Multi-view consistent text-driven 3DGS editing."
+    },
+    {
+      "paper_id": "ECCV_2024::texture_gs_disentangle_the_geometry_and_texture_for_3d_gaussian_splatting_editing",
+      "title": "Texture-GS: Disentangle the Geometry and Texture for 3D Gaussian Splatting Editing",
+      "ai_score": "S",
+      "ai_reason": "Geometry-texture disentanglement for 3DGS editing."
+    },
+    {
+      "paper_id": "ICCV_2025::intergsedit_interactive_3d_gaussian_splatting_editing_with_3d_geometry_consistent_attention_prior",
+      "title": "InterGSEdit: Interactive 3D Gaussian Splatting Editing with 3D Geometry-Consistent Attention Prior",
+      "ai_score": "S",
+      "ai_reason": "Title contains editing; core 3DGS editing method."
+    },
+    {
+      "paper_id": "ICLR_2024::real_time_photorealistic_dynamic_scene_representation_and_rendering_with_4d_gaussian_splatting",
+      "title": "Real-time Photorealistic Dynamic Scene Representation and Rendering with 4D Gaussian Splatting",
+      "ai_score": "S",
+      "ai_reason": "4DGS with 4D Gaussian primitives and anisotropic ellipses rotating in space-time. Essential baseline and foundational work."
+    },
+    {
+      "paper_id": "NeurIPS_2024::d_miso_editing_dynamic_3d_scenes_using_multi_gaussians_soup",
+      "title": "D-MiSo: Editing Dynamic 3D Scenes using Multi-Gaussians Soup",
+      "ai_score": "S",
+      "ai_reason": "Text-driven 3DGS editing with dynamic control, directly addresses GS editing."
+    },
+    {
+      "paper_id": "AAAI_2025::efficient_gaussian_splatting_for_monocular_dynamic_scene_rendering_via_sparse_time_variant_attribute_modeling",
+      "title": "Efficient Gaussian Splatting for Monocular Dynamic Scene Rendering via Sparse Time-Variant Attribute Modeling",
+      "ai_score": "A",
+      "ai_reason": "4D/dynamic GS for monocular dynamic scenes, efficient rendering rather than editing."
+    },
+    {
+      "paper_id": "AAAI_2025::motion_decoupled_3d_gaussian_splatting_for_dynamic_object_representation",
+      "title": "Motion Decoupled 3D Gaussian Splatting for Dynamic Object Representation",
+      "ai_score": "A",
+      "ai_reason": "Dynamic 3DGS for dynamic object representation, core 4DGS method."
+    },
+    {
+      "paper_id": "ACMMM_2025::cadgs_modeling_inter_gaussian_mutual_information_for_dynamic_novel_view_synthesis",
+      "title": "CaDGS: Modeling Inter-Gaussian Mutual Information for Dynamic Novel View Synthesis",
+      "ai_score": "A",
+      "ai_reason": "4DGS for dynamic novel view synthesis, relevant methodology."
+    },
+    {
+      "paper_id": "ACMMM_2025::dynamic_2d_gaussians_geometrically_accurate_radiance_fields_for_dynamic_objects",
+      "title": "Dynamic 2D Gaussians: Geometrically Accurate Radiance Fields for Dynamic Objects",
+      "ai_score": "A",
+      "ai_reason": "4DGS for dynamic objects with geometry focus, reconstruction not editing."
+    },
+    {
+      "paper_id": "ACMMM_2025::e_4dgs_high_fidelity_dynamic_reconstruction_from_the_multi_view_event_cameras",
+      "title": "E-4DGS: High-Fidelity Dynamic Reconstruction from the Multi-view Event Cameras",
+      "ai_score": "A",
+      "ai_reason": "4DGS for dynamic reconstruction with event cameras, not editing."
+    },
+    {
+      "paper_id": "ACMMM_2025::futuregs_structured_gaussian_fields_for_future_aware_dynamic_scene_modeling",
+      "title": "FutureGS: Structured Gaussian Fields for Future-Aware Dynamic Scene Modeling",
+      "ai_score": "A",
+      "ai_reason": "4DGS for dynamic scenes with structured fields, focuses on future prediction not editing."
+    },
+    {
+      "paper_id": "ACMMM_2025::see_through_the_occlusions_amodal_gaussian_splatting_for_few_shot_3d_reconstruction",
+      "title": "See Through the Occlusions: Amodal Gaussian Splatting for Few-Shot 3D Reconstruction",
+      "ai_score": "A",
+      "ai_reason": "Reinterprets time as deformation axis with opacity modulation, shares core 4DGS machinery."
+    },
+    {
+      "paper_id": "ACMMM_2025::sparse4dgs_flow_geometry_assisted_4d_gaussian_splatting_for_dynamic_sparse_view_synthesis",
+      "title": "Sparse4DGS: Flow-Geometry Assisted 4D Gaussian Splatting for Dynamic Sparse View Synthesis",
+      "ai_score": "A",
+      "ai_reason": "4DGS for sparse-view synthesis. Core building block but focuses on synthesis not editing."
+    },
+    {
+      "paper_id": "CVPR_2024::3d_geometry_aware_deformable_gaussian_splatting_for_dynamic_view_synthesis",
+      "title": "3D Geometry-Aware Deformable Gaussian Splatting for Dynamic View Synthesis",
+      "ai_score": "A",
+      "ai_reason": "Deformable GS for dynamic view synthesis with 3D geometry constraints, core 4DGS technique."
+    },
+    {
+      "paper_id": "CVPR_2024::align_your_gaussians_text_to_4d_with_dynamic_3d_gaussians_and_composed_diffusion_models",
+      "title": "Align Your Gaussians: Text-to-4D with Dynamic 3D Gaussians and Composed Diffusion Models",
+      "ai_score": "A",
+      "ai_reason": "Text-to-4D with dynamic 3D Gaussians, core 4DGS generation method."
+    },
+    {
+      "paper_id": "CVPR_2024::deformable_3d_gaussians_for_high_fidelity_monocular_dynamic_scene_reconstruction",
+      "title": "Deformable 3D Gaussians for High-Fidelity Monocular Dynamic Scene Reconstruction",
+      "ai_score": "A",
+      "ai_reason": "Deformable 3DGS for dynamic reconstruction, core deformation method."
+    },
+    {
+      "paper_id": "CVPR_2025::drivedreamer4d_world_models_are_effective_data_machines_for_4d_driving_scene_representation",
+      "title": "DriveDreamer4D: World Models Are Effective Data Machines for 4D Driving Scene Representation",
+      "ai_score": "A",
+      "ai_reason": "4D driving scene representation using GS, but focused on driving simulation not editing."
+    },
+    {
+      "paper_id": "CVPR_2024::feature_3dgs_supercharging_3d_gaussian_splatting_to_enable_distilled_feature_fields",
+      "title": "Feature 3DGS: Supercharging 3D Gaussian Splatting to Enable Distilled Feature Fields",
+      "ai_score": "A",
+      "ai_reason": "Feature distillation for 3DGS enabling semantic editing applications."
+    },
+    {
+      "paper_id": "CVPR_2025::gifstream_4d_gaussian_based_immersive_video_with_feature_stream",
+      "title": "GIFStream: 4D Gaussian-based Immersive Video with Feature Stream",
+      "ai_score": "A",
+      "ai_reason": "4DGS for immersive video, relevant 4DGS method but not editing."
+    },
+    {
+      "paper_id": "CVPR_2025::himor_monocular_deformable_gaussian_reconstruction_with_hierarchical_motion_representation",
+      "title": "HiMoR: Monocular Deformable Gaussian Reconstruction with Hierarchical Motion Representation",
+      "ai_score": "A",
+      "ai_reason": "Deformable GS for dynamic reconstruction with hierarchical motion, core 4DGS method."
+    },
+    {
+      "paper_id": "CVPR_2025::ntr_gaussian_nighttime_dynamic_thermal_reconstruction_with_4d_gaussian_splatting_based_on_thermodynamics",
+      "title": "NTR-Gaussian: Nighttime Dynamic Thermal Reconstruction with 4D Gaussian Splatting Based on Thermodynamics",
+      "ai_score": "A",
+      "ai_reason": "4DGS for dynamic thermal reconstruction, core 4DGS method."
+    },
+    {
+      "paper_id": "CVPR_2025::robust_multi_object_4d_generation_for_in_the_wild_videos",
+      "title": "Robust Multi-Object 4D Generation for In-the-wild Videos",
+      "ai_score": "A",
+      "ai_reason": "Deformable 4DGS for dynamic scene generation from video, relevant 4DGS technique."
+    },
+    {
+      "paper_id": "CVPR_2024::spacetime_gaussian_feature_splatting_for_real_time_dynamic_view_synthesis",
+      "title": "Spacetime Gaussian Feature Splatting for Real-Time Dynamic View Synthesis",
+      "ai_score": "A",
+      "ai_reason": "Spacetime GS for dynamic view synthesis, core 4DGS method."
+    },
+    {
+      "paper_id": "CVPR_2025::splatflow_self_supervised_dynamic_gaussian_splatting_in_neural_motion_flow_field_for_autonomous_driving",
+      "title": "SplatFlow: Self-Supervised Dynamic Gaussian Splatting in Neural Motion Flow Field for Autonomous Driving",
+      "ai_score": "A",
+      "ai_reason": "Dynamic GS for autonomous driving, reconstruction-focused."
+    },
+    {
+      "paper_id": "ECCV_2024::a_compact_dynamic_3d_gaussian_representation_for_real_time_dynamic_view_synthesis",
+      "title": "A Compact Dynamic 3D Gaussian Representation for Real-Time Dynamic View Synthesis",
+      "ai_score": "A",
+      "ai_reason": "Dynamic GS for few-shot reconstruction, view synthesis focused."
+    },
+    {
+      "paper_id": "ECCV_2024::dgd_dynamic_3d_gaussians_distillation",
+      "title": "DGD: Dynamic 3D Gaussians Distillation",
+      "ai_score": "A",
+      "ai_reason": "Dynamic 3D Gaussians with semantic distillation, relevant 4DGS approach."
+    },
+    {
+      "paper_id": "ECCV_2024::per_gaussian_embedding_based_deformation_for_deformable_3d_gaussian_splatting",
+      "title": "Per-Gaussian Embedding-Based Deformation for Deformable 3D Gaussian Splatting",
+      "ai_score": "A",
+      "ai_reason": "Per-Gaussian deformation for deformable 3DGS, core deformation technique."
+    },
+    {
+      "paper_id": "ECCV_2024::stag4d_spatial_temporal_anchored_generative_4d_gaussians",
+      "title": "STAG4D: Spatial-Temporal Anchored Generative 4D Gaussians",
+      "ai_score": "A",
+      "ai_reason": "4DGS for dynamic scene generation, relevant 4DGS technique."
+    },
+    {
+      "paper_id": "ECCV_2024::swings_sliding_windows_for_dynamic_3d_gaussian_splatting",
+      "title": "SWinGS: Sliding Windows for Dynamic 3D Gaussian Splatting",
+      "ai_score": "A",
+      "ai_reason": "Dynamic GS for novel view synthesis, core 4DGS method."
+    },
+    {
+      "paper_id": "ICCV_2025::4d_gaussian_splatting_slam",
+      "title": "4D Gaussian Splatting SLAM",
+      "ai_score": "A",
+      "ai_reason": "4DGS for SLAM, shares core 4DGS methodology but focuses on localization/mapping."
+    },
+    {
+      "paper_id": "ICCV_2025::7dgs_unified_spatial_temporal_angular_gaussian_splatting",
+      "title": "7DGS: Unified Spatial-Temporal-Angular Gaussian Splatting",
+      "ai_score": "A",
+      "ai_reason": "Extends 4DGS by unifying spatial-temporal-angular dimensions, rendering-focused."
+    },
+    {
+      "paper_id": "ICCV_2025::degauss_dynamic_static_decomposition_with_gaussian_splatting_for_distractor_free_3d_reconstruction",
+      "title": "DeGauss: Dynamic-Static Decomposition with Gaussian Splatting for Distractor-free 3D Reconstruction",
+      "ai_score": "A",
+      "ai_reason": "Dynamic-static decomposition with GS, relevant for editing infrastructure."
+    },
+    {
+      "paper_id": "ICCV_2025::emd_explicit_motion_modeling_for_high_quality_street_gaussian_splatting",
+      "title": "EMD: Explicit Motion Modeling for High-Quality Street Gaussian Splatting",
+      "ai_score": "A",
+      "ai_reason": "4DGS for dynamic street scenes with explicit motion, reconstruction-focused."
+    },
+    {
+      "paper_id": "ICCV_2025::gaussianupdate_continual_3d_gaussian_splatting_update_for_changing_environments",
+      "title": "GaussianUpdate: Continual 3D Gaussian Splatting Update for Changing Environments",
+      "ai_score": "A",
+      "ai_reason": "Continual 3DGS update for changing environments."
+    },
+    {
+      "paper_id": "ICCV_2025::localdygs_multi_view_global_dynamic_scene_modeling_via_adaptive_local_implicit_feature_decoupling",
+      "title": "LocalDyGS: Multi-view Global Dynamic Scene Modeling via Adaptive Local Implicit Feature Decoupling",
+      "ai_score": "A",
+      "ai_reason": "Dynamic GS for multi-view dynamic scene modeling, core 4DGS method."
+    },
+    {
+      "paper_id": "ICCV_2025::mega_memory_efficient_4d_gaussian_splatting_for_dynamic_scenes",
+      "title": "MEGA: Memory-Efficient 4D Gaussian Splatting for Dynamic Scenes",
+      "ai_score": "A",
+      "ai_reason": "Memory-efficient 4DGS for dynamic scenes, methodological overlap."
+    },
+    {
+      "paper_id": "ICLR_2025::dynamic_gaussians_mesh_consistent_mesh_reconstruction_from_dynamic_scenes",
+      "title": "Dynamic Gaussians Mesh: Consistent Mesh Reconstruction from Dynamic Scenes",
+      "ai_score": "A",
+      "ai_reason": "Dynamic Gaussians with mesh output, reconstruction not editing."
+    },
+    {
+      "paper_id": "ICLR_2025::swift4d_adaptive_divide_and_conquer_gaussian_splatting_for_compact_and_efficient_reconstruction_of_dynamic_scene",
+      "title": "Swift4D: Adaptive divide-and-conquer Gaussian Splatting for compact and efficient reconstruction of dynamic scene",
+      "ai_score": "A",
+      "ai_reason": "4DGS for compact/efficient dynamic reconstruction."
+    },
+    {
+      "paper_id": "ICML_2024::superpoint_gaussian_splatting_for_real_time_high_fidelity_dynamic_scene_reconstruction",
+      "title": "Superpoint Gaussian Splatting for Real-Time High-Fidelity Dynamic Scene Reconstruction",
+      "ai_score": "A",
+      "ai_reason": "4D scene generation with video diffusion, relevant 4D content creation."
+    },
+    {
+      "paper_id": "NeurIPS_2024::4d_gaussian_splatting_in_the_wild_with_uncertainty_aware_regularization",
+      "title": "4D Gaussian Splatting in the Wild with Uncertainty-Aware Regularization",
+      "ai_score": "A",
+      "ai_reason": "4DGS with regularization for dynamic scenes. Significant overlap though focuses on novel view synthesis."
+    },
+    {
+      "paper_id": "NeurIPS_2025::4d3r_motion_aware_neural_reconstruction_and_rendering_of_dynamic_scenes_from_monocular_videos",
+      "title": "4D3R: Motion-Aware Neural Reconstruction and Rendering of Dynamic Scenes from Monocular Videos",
+      "ai_score": "A",
+      "ai_reason": "4DGS for dynamic reconstruction from monocular video."
+    },
+    {
+      "paper_id": "NeurIPS_2025::4dgt_learning_a_4d_gaussian_transformer_using_real_world_monocular_videos",
+      "title": "4DGT: Learning a 4D Gaussian Transformer Using Real-World Monocular Videos",
+      "ai_score": "A",
+      "ai_reason": "4D Gaussian Transformer for dynamic reconstruction, relevant 4DGS technique."
+    },
+    {
+      "paper_id": "NeurIPS_2025::dgs_lrm_real_time_deformable_3d_gaussian_reconstruction_from_monocular_videos",
+      "title": "DGS-LRM: Real-Time Deformable 3D Gaussian Reconstruction From Monocular Videos",
+      "ai_score": "A",
+      "ai_reason": "Deformable GS reconstruction from monocular video, feed-forward method."
+    },
+    {
+      "paper_id": "NeurIPS_2024::dn_4dgs_denoised_deformable_network_with_temporal_spatial_aggregation_for_dynamic_scene_rendering",
+      "title": "DN-4DGS: Denoised Deformable Network with Temporal-Spatial Aggregation for Dynamic Scene Rendering",
+      "ai_score": "A",
+      "ai_reason": "4DGS with deformable networks for dynamic rendering, relevant technique but not editing."
+    },
+    {
+      "paper_id": "NeurIPS_2024::fully_explicit_dynamic_gaussian_splatting",
+      "title": "Fully Explicit Dynamic Gaussian Splatting",
+      "ai_score": "A",
+      "ai_reason": "Explicit 4DGS with static/dynamic separation. Core representation building block for editing."
+    },
+    {
+      "paper_id": "NeurIPS_2025::haif_gs_hierarchical_and_induced_flow_guided_gaussian_splatting_for_dynamic_scene",
+      "title": "HAIF-GS: Hierarchical and Induced Flow-Guided Gaussian Splatting for Dynamic Scene",
+      "ai_score": "A",
+      "ai_reason": "4DGS with hierarchical attention for dynamic reconstruction."
+    },
+    {
+      "paper_id": "NeurIPS_2025::holigs_holistic_gaussian_splatting_for_embodied_view_synthesis",
+      "title": "HoliGS: Holistic Gaussian Splatting for Embodied View Synthesis",
+      "ai_score": "A",
+      "ai_reason": "Deformable/4D GS for dynamic scenes with hierarchical decomposition. Relevant 4DGS technique."
+    },
+    {
+      "paper_id": "NeurIPS_2024::motiongs_exploring_explicit_motion_guidance_for_deformable_3d_gaussian_splatting",
+      "title": "MotionGS: Exploring Explicit Motion Guidance for Deformable 3D Gaussian Splatting",
+      "ai_score": "A",
+      "ai_reason": "Deformable 3DGS with explicit motion, reconstruction-focused."
+    },
+    {
+      "paper_id": "SIGGRAPH_2025::splat4d_diffusion_enhanced_4d_gaussian_splatting_for_temporally_and_spatially_consistent_content_creation",
+      "title": "Splat4D: Diffusion-Enhanced 4D Gaussian Splatting for Temporally and Spatially Consistent Content Creation",
+      "ai_score": "A",
+      "ai_reason": "4DGS content creation, not editing/manipulation."
+    },
+    {
+      "paper_id": "SIGGRAPH_Asia_2025::anchored_4d_gaussian_splatting_for_dynamic_novel_view_synthesis",
+      "title": "Anchored 4D Gaussian Splatting for Dynamic Novel View Synthesis",
+      "ai_score": "A",
+      "ai_reason": "4DGS for dynamic reconstruction from event cameras."
+    },
+    {
+      "paper_id": "SIGGRAPH_Asia_2025::clustered_error_correction_with_grouped_4d_gaussian_splatting",
+      "title": "Clustered Error Correction with Grouped 4D Gaussian Splatting",
+      "ai_score": "A",
+      "ai_reason": "4DGS for dynamic scene reconstruction with error correction, not editing."
+    },
+    {
+      "paper_id": "SIGGRAPH_Asia_2025::neural_texture_splatting_expressive_3d_gaussian_splatting_for_view_synthesis_geometry_and_dynamic_reconstruction",
+      "title": "Neural Texture Splatting: Expressive 3D Gaussian Splatting for View Synthesis, Geometry, and Dynamic Reconstruction",
+      "ai_score": "A",
+      "ai_reason": "3DGS extended to 4D/dynamic reconstruction, view synthesis."
+    },
+    {
+      "paper_id": "SIGGRAPH_Asia_2025::trackersplat_exploiting_point_tracking_for_fast_and_robust_dynamic_3d_gaussians_reconstruction",
+      "title": "TrackerSplat: Exploiting Point Tracking for Fast and Robust Dynamic 3D Gaussians Reconstruction",
+      "ai_score": "A",
+      "ai_reason": "Dynamic 3DGS reconstruction with point tracking."
+    },
+    {
+      "paper_id": "ACMMM_2025::dgns_deformable_gaussian_splatting_and_dynamic_neural_surface_for_monocular_dynamic_3d_reconstruction",
+      "title": "DGNS: Deformable Gaussian Splatting and Dynamic Neural Surface for Monocular Dynamic 3D Reconstruction",
+      "ai_score": "B",
+      "ai_reason": "Deformable GS for reconstruction, not editing/manipulation."
+    },
+    {
+      "paper_id": "ACMMM_2025::holotime_taming_video_diffusion_models_for_panoramic_4d_scene_generation",
+      "title": "HoloTime: Taming Video Diffusion Models for Panoramic 4D Scene Generation",
+      "ai_score": "B",
+      "ai_reason": "Panoramic 4D scene generation, not editing."
+    },
+    {
+      "paper_id": "CVPR_2025::anigs_animatable_gaussian_avatar_from_a_single_image_with_inconsistent_gaussian_reconstruction",
+      "title": "AniGS: Animatable Gaussian Avatar from a Single Image with Inconsistent Gaussian Reconstruction",
+      "ai_score": "B",
+      "ai_reason": "Animatable avatar from single image, not scene editing."
+    },
+    {
+      "paper_id": "CVPR_2025::generative_sparse_view_gaussian_splatting",
+      "title": "Generative Sparse-View Gaussian Splatting",
+      "ai_score": "B",
+      "ai_reason": "Sparse-view 3DGS for novel view synthesis, not 4D or editing."
+    },
+    {
+      "paper_id": "CVPR_2025::improving_gaussian_splatting_with_localized_points_management",
+      "title": "Improving Gaussian Splatting with Localized Points Management",
+      "ai_score": "B",
+      "ai_reason": "Improves 3DGS optimization, foundational but not 4D or editing."
+    },
+    {
+      "paper_id": "CVPR_2025::voxelsplat_dynamic_gaussian_splatting_as_an_effective_loss_for_occupancy_and_flow_prediction",
+      "title": "VoxelSplat: Dynamic Gaussian Splatting as an Effective Loss for Occupancy and Flow Prediction",
+      "ai_score": "B",
+      "ai_reason": "Dynamic GS as loss for occupancy/flow prediction, tangential."
+    },
+    {
+      "paper_id": "ICCV_2025::coda_4dgs_dynamic_gaussian_splatting_with_context_and_deformation_awareness_for_autonomous_driving",
+      "title": "CoDa-4DGS: Dynamic Gaussian Splatting with Context and Deformation Awareness for Autonomous Driving",
+      "ai_score": "B",
+      "ai_reason": "4DGS for autonomous driving rendering, not editing/manipulation."
+    },
+    {
+      "paper_id": "ICCV_2025::gsv3d_gaussian_splatting_based_geometric_distillation_with_stable_video_diffusion_for_single_image_3d_object_generation",
+      "title": "GSV3D: Gaussian Splatting-based Geometric Distillation with Stable Video Diffusion for Single-Image 3D Object Generation",
+      "ai_score": "B",
+      "ai_reason": "3DGS for single-image 3D generation, not dynamic/4D editing."
+    },
+    {
+      "paper_id": "ICCV_2025::generative_gaussian_splatting_generating_3d_scenes_with_video_diffusion_priors",
+      "title": "Generative Gaussian Splatting: Generating 3D Scenes with Video Diffusion Priors",
+      "ai_score": "B",
+      "ai_reason": "GS with generative priors for static scene synthesis."
+    },
+    {
+      "paper_id": "ICCV_2025::interactavatar_modeling_hand_face_interaction_in_photorealistic_avatars_with_deformable_gaussians",
+      "title": "InteractAvatar: Modeling Hand-Face Interaction in Photorealistic Avatars with Deformable Gaussians",
+      "ai_score": "B",
+      "ai_reason": "Deformable Gaussians for avatar modeling, avatar-specific not scene editing."
+    },
+    {
+      "paper_id": "ICCV_2025::robustsplat_decoupling_densification_and_dynamics_for_transient_free_3dgs",
+      "title": "RobustSplat: Decoupling Densification and Dynamics for Transient-Free 3DGS",
+      "ai_score": "B",
+      "ai_reason": "Robustness of 3DGS in dynamic scenes, transient removal."
+    },
+    {
+      "paper_id": "NeurIPS_2025::1000_fps_4d_gaussian_splatting_for_dynamic_scene_rendering",
+      "title": "1000+ FPS 4D Gaussian Splatting for Dynamic Scene Rendering",
+      "ai_score": "B",
+      "ai_reason": "Focuses on rendering speed optimization for 4DGS, not editing."
+    },
+    {
+      "paper_id": "NeurIPS_2024::neurogauss4d_pci_4d_neural_fields_and_gaussian_deformation_fields_for_point_cloud_interpolation",
+      "title": "NeuroGauss4D-PCI: 4D Neural Fields and Gaussian Deformation Fields for Point Cloud Interpolation",
+      "ai_score": "B",
+      "ai_reason": "4D neural fields for point cloud interpolation, not GS editing."
+    },
+    {
+      "paper_id": "NeurIPS_2025::spike4dgs_towards_high_speed_dynamic_scene_rendering_with_4d_gaussian_splatting_via_a_spike_camera_array",
+      "title": "Spike4DGS: Towards High-Speed Dynamic Scene Rendering with 4D Gaussian Splatting via a Spike Camera Array",
+      "ai_score": "B",
+      "ai_reason": "4DGS with spike cameras, specialized sensor input not editing."
+    },
+    {
+      "paper_id": "NeurIPS_2025::temporal_smoothness_aware_rate_distortion_optimized_4d_gaussian_splatting",
+      "title": "Temporal Smoothness-Aware Rate-Distortion Optimized 4D Gaussian Splatting",
+      "ai_score": "B",
+      "ai_reason": "4DGS compression/storage efficiency, not editing."
+    },
+    {
+      "paper_id": "SIGGRAPH_Asia_2025::virtually_being_customizing_camera_controllable_video_diffusion_models_with_volumetric_performance_captures",
+      "title": "Virtually Being: Customizing Camera-Controllable Video Diffusion Models with Volumetric Performance Captures",
+      "ai_score": "B",
+      "ai_reason": "4DGS as data source for video diffusion, not editing."
+    },
+    {
+      "paper_id": "CVPR_2025::go_with_the_flow_motion_controllable_video_diffusion_models_using_real_time_warped_noise",
+      "title": "Go-with-the-Flow: Motion-Controllable Video Diffusion Models Using Real-Time Warped Noise",
+      "ai_score": "C",
+      "ai_reason": "Motion-controllable video diffusion, no GS or 3D/4D scene editing."
+    },
+    {
+      "paper_id": "ECCV_2024::watching_it_in_dark_a_target_aware_representation_learning_framework_for_high_level_vision_tasks_in_low_illumination",
+      "title": "Watching it in Dark: A Target-aware Representation Learning Framework for High-Level Vision Tasks in Low Illumination",
+      "ai_score": "C",
+      "ai_reason": "Low-light vision, no connection to GS or 3D/4D editing."
+    },
+    {
+      "paper_id": "ICCV_2025::mixture_of_experts_guided_by_gaussian_splatters_matters_a_new_approach_to_weakly_supervised_video_anomaly_detection",
+      "title": "Mixture of Experts Guided by Gaussian Splatters Matters: A new Approach to Weakly-Supervised Video Anomaly Detection",
+      "ai_score": "C",
+      "ai_reason": "GS for video anomaly detection, unrelated to scene editing."
+    },
+    {
+      "paper_id": "ICLR_2025::an_exploration_with_entropy_constrained_3d_gaussians_for_2d_video_compression",
+      "title": "An Exploration with Entropy Constrained 3D Gaussians for 2D Video Compression",
+      "ai_score": "C",
+      "ai_reason": "3DGS for video compression, peripheral application."
+    },
+    {
+      "paper_id": "ICLR_2024::bidirectional_temporal_diffusion_model_for_temporally_consistent_human_animation",
+      "title": "Bidirectional Temporal Diffusion Model for Temporally Consistent Human Animation",
+      "ai_score": "C",
+      "ai_reason": "Human animation via diffusion, no GS or 3D/4D editing."
+    },
+    {
+      "paper_id": "ICML_2025::optimal_sensor_scheduling_and_selection_for_continuous_discrete_kalman_filtering_with_auxiliary_dynamics",
+      "title": "Optimal Sensor Scheduling and Selection for Continuous-Discrete Kalman Filtering with Auxiliary Dynamics",
+      "ai_score": "C",
+      "ai_reason": "Sensor scheduling for Kalman filtering, unrelated to GS."
+    },
+    {
+      "paper_id": "ICML_2025::robust_and_conjugate_spatio_temporal_gaussian_processes",
+      "title": "Robust and Conjugate Spatio-Temporal Gaussian Processes",
+      "ai_score": "C",
+      "ai_reason": "Gaussian process regression, unrelated to Gaussian Splatting."
+    }
+  ],
+  "adjustments": [],
+  "final_s": 11,
+  "final_a": 48,
+  "final_b": 16,
+  "final_c": 7,
+  "errors": [],
+  "stage_times": {
+    "retrieval": 29.71940803527832,
+    "merge": 0.0012042522430419922,
+    "meta_enrich": 0.0017821788787841797
+  }
+}
