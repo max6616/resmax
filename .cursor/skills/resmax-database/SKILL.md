@@ -1,20 +1,21 @@
 ---
 name: resmax-database
-description: 构建和维护 AI 顶会基础文献库。包括数据源调研、accepted list 抓取、元信息批量补全、embedding 缓存构建，均支持增量更新。输出 paper_database/accepted_index.csv 和 embedding 缓存。
+description: 构建和维护 AI 顶会基础文献库。包括数据源调研、accepted list 抓取、元信息批量补全，均支持增量更新。输出 paper_database/accepted_index.csv。
 ---
 
 # resmax-database
 
 ## 所属体系
 
-本 skill 属于 resmax 自动化科研文献基础设施，与 `resmax-survey` 协同工作，通过文件系统共享数据、无运行时耦合。
+本 skill 属于 resmax 自动化科研文献基础设施，与 `resmax-embedding`、`resmax-survey` 协同工作，通过文件系统共享数据、无运行时耦合。
 
-数据流：`resmax-database`（本 skill）产出基础文献索引和 embedding 缓存 → `resmax-survey` 消费这些数据进行方向级检索与评分。
+数据流：`resmax-database`（本 skill）产出基础文献索引 → `resmax-embedding` 构建 embedding 缓存 → `resmax-survey` 消费索引和缓存进行方向级检索与评分。
 
 共享数据目录：
 | 目录 | 归属 | 说明 |
 |------|------|------|
-| `paper_database/` | resmax-database 产出 | 全量基础文献索引、embedding 缓存、数据源调研报告 |
+| `paper_database/` | resmax-database 产出 | 全量基础文献索引 |
+| `paper_database/embedding_cache/` | resmax-embedding 产出 | Embedding 缓存 |
 | `literature_research/<方向>/` | resmax-survey 产出 | 方向级检索结果、评分文献列表、筛选日志 |
 
 设计原则：CSV 为唯一权威索引；批量优先、逐篇兜底；Skill 独立；脚本开箱即用；增量更新。
@@ -38,9 +39,9 @@ SKILL_ROOT=.cursor/skills/resmax-database
 
 ## 触发词
 
-"建文献库", "build literature base", "更新accepted", "刷新索引", "build cache", "补摘要", "增量更新文献库"
+"建文献库", "build literature base", "更新accepted", "刷新索引", "补摘要", "增量更新文献库"
 
-## 四个子能力
+## 三个子能力
 
 ### 0. 数据源调研（新增会议的前置步骤，subagent 执行）
 
@@ -281,45 +282,12 @@ print(f'{has}/{len(rows)} ({has/len(rows)*100:.1f}%)')
 "
 ```
 
-### 3. Embedding 缓存构建
-
-在 GPU 服务器上构建/增量更新 embedding 缓存。
-
-**前置检查（硬性）**：
-
-1. SSH 连接服务器，确认能正常连通
-2. 运行 `nvidia-smi` 查看各 GPU 的显存占用和进程情况
-3. 选择空闲 GPU（显存占用 < 10%），通过 `--gpus` 参数指定，避开有高占用的 GPU 以免影响其他用户
-
-```bash
-# 前置：检查 GPU 占用
-ssh <server> nvidia-smi
-
-# 构建缓存（指定空闲 GPU）
-python3 $SKILL_ROOT/scripts/build_cache_multigpu.py \
-  --accepted paper_database/accepted_index.csv \
-  --out paper_database/embedding_cache/qwen3_8b.npz \
-  --gpus 0,1
-```
-
-| 参数 | 必填 | 说明 | 默认值 |
-|------|------|------|--------|
-| `--accepted` | 是 | accepted_index.csv 路径 | — |
-| `--out` | 否 | 输出 .npz 路径 | `paper_database/embedding_cache/qwen3_8b.npz` |
-| `--model` | 否 | embedding 模型名 | `Qwen/Qwen3-Embedding-8B` |
-| `--batch-size` | 否 | 批大小 | `64` |
-| `--max-length` | 否 | 最大 token 长度 | — |
-| `--dim` | 否 | 截断维度（0=全维度） | `0`（全维度，不截断） |
-| `--gpus` | 否 | 逗号分隔的 GPU ID（必须选择空闲 GPU） | 自动检测 |
-| `--instruction` | 否 | query 指令前缀 | 见 config |
-
 ## 输出
 
 | 文件 | 说明 |
 |------|------|
 | `paper_database/accepted_index.csv` | 基础文献索引（schema 见下方） |
 | `paper_database/accepted_index_coverage_report.md` | 覆盖率报告 |
-| `paper_database/embedding_cache/qwen3_8b.npz` | Embedding 缓存 |
 | `$SKILL_ROOT/config/venue_playbooks/` | Venue 级经验手册（经验证的跨年份复用经验，子能力 0 的 prior knowledge 输入） |
 
 ## accepted_index.csv Schema
@@ -352,13 +320,9 @@ python3 $SKILL_ROOT/scripts/build_cache_multigpu.py \
 4. 运行 `enrich_abstracts.py --filter <CONF_YEAR>` 补摘要（S2 batch）
 5. 运行 `enrich_abstracts_fallback.py --filter <CONF_YEAR>` 补摘要（多源 fallback）
 6. 验证摘要覆盖率达到 100%，未达标则 agent 用 web search 逐篇搜索补齐（见子能力 2 第三轮）
-7. 在 GPU 服务器上增量更新 embedding 缓存
+7. 使用 `resmax-embedding` skill 在 GPU 服务器上增量更新 embedding 缓存
 
 ## 配置文件说明
-
-### config/default_config.json
-
-embedding 模型参数配置，包括模型名、维度、批大小、指令前缀、缓存路径等。
 
 ### config/source_registry.json
 
