@@ -18,43 +18,56 @@ from typing import Iterable
 
 VENUE_DOMAINS: dict[str, dict] = {
     "ICLR": {
-        "virtual_base": "https://iclr.cc",
-        "proceedings_base": "https://proceedings.iclr.cc/paper_files/paper",
         "virtual_json_pattern": "https://iclr.cc/static/virtual/data/iclr-{year}-orals-posters.json",
         "virtual_html_pattern": "https://iclr.cc/virtual/{year}/papers.html",
+        "proceedings_base": "https://proceedings.iclr.cc/paper_files/paper",
         "openreview_group": "ICLR.cc/{year}/Conference",
     },
     "NEURIPS": {
-        "virtual_base": "https://neurips.cc",
-        "proceedings_base": "https://papers.nips.cc/paper_files/paper",
         "virtual_json_pattern": "https://neurips.cc/static/virtual/data/neurips-{year}-orals-posters.json",
         "virtual_html_pattern": "https://neurips.cc/virtual/{year}/papers.html",
+        "proceedings_base": "https://papers.nips.cc/paper_files/paper",
         "openreview_group": "NeurIPS.cc/{year}/Conference",
     },
     "ICML": {
-        "virtual_base": "https://icml.cc",
-        "proceedings_base": None,
         "virtual_json_pattern": "https://icml.cc/static/virtual/data/icml-{year}-orals-posters.json",
         "virtual_html_pattern": "https://icml.cc/virtual/{year}/papers.html",
         "openreview_group": "ICML.cc/{year}/Conference",
     },
     "CVPR": {
-        "virtual_base": None,
-        "proceedings_base": None,
         "openaccess_pattern": "https://openaccess.thecvf.com/CVPR{year}?day=all",
-        "openreview_group": None,
     },
     "ECCV": {
-        "virtual_base": None,
-        "proceedings_base": None,
+        "virtual_json_pattern": "https://eccv.ecva.net/static/virtual/data/eccv-{year}-orals-posters.json",
         "openaccess_pattern": "https://openaccess.thecvf.com/ECCV{year}?day=all",
-        "openreview_group": None,
     },
     "ICCV": {
-        "virtual_base": None,
-        "proceedings_base": None,
         "openaccess_pattern": "https://openaccess.thecvf.com/ICCV{year}?day=all",
-        "openreview_group": None,
+    },
+    "ACL": {
+        "anthology_pattern": "https://aclanthology.org/events/acl-{year}/",
+    },
+    "EMNLP": {
+        "anthology_pattern": "https://aclanthology.org/events/emnlp-{year}/",
+    },
+    "NAACL": {
+        "anthology_pattern": "https://aclanthology.org/events/naacl-{year}/",
+    },
+    "AAAI": {
+        "ojs_archive_url": "https://ojs.aaai.org/index.php/AAAI/issue/archive",
+    },
+    "KDD": {
+        "kdd_official_pattern": "https://kdd{year}.kdd.org/research-track-papers/",
+    },
+    "SIGGRAPH": {
+        "kesen_pattern": "https://kesen.realtimerendering.com/sig{year}.html",
+    },
+    "SIGGRAPH_ASIA": {
+        "kesen_pattern": "https://kesen.realtimerendering.com/siga{year}.html",
+    },
+    "ACMMM": {
+        "acmmm_official_pattern": "https://{year}.acmmm.org/accepted-papers",
+        "acmmm_alt_pattern": "https://acmmm{year}.org/accepted-papers",
     },
 }
 
@@ -212,6 +225,121 @@ def probe_virtual_html(venue: str, year: int, domain: dict) -> SourceCandidate |
     )
 
 
+def probe_acl_anthology(venue: str, year: int, domain: dict) -> SourceCandidate | None:
+    pattern = domain.get("anthology_pattern")
+    if not pattern:
+        return None
+    url = pattern.format(year=year)
+    status = _http_status(url)
+    if status != 200:
+        return SourceCandidate(
+            name=f"{venue} {year} ACL Anthology",
+            url=url, status=status,
+            notes=f"HTTP {status}" if status else "unreachable",
+        )
+    return SourceCandidate(
+        name=f"{venue} {year} ACL Anthology",
+        url=url, status=200,
+        fields=["title", "authors", "abstract", "pdf_link"],
+        notes="ACL Anthology event page",
+        recommended_kind="acl_anthology_html",
+        recommended_parser="acl_anthology_html",
+    )
+
+
+def probe_aaai_ojs(venue: str, year: int, domain: dict) -> SourceCandidate | None:
+    url = domain.get("ojs_archive_url")
+    if not url:
+        return None
+    status = _http_status(url)
+    if status != 200:
+        return SourceCandidate(
+            name=f"AAAI {year} OJS Archive",
+            url=url, status=status,
+            notes=f"HTTP {status}" if status else "unreachable",
+        )
+    yy = str(year)[-2:]
+    return SourceCandidate(
+        name=f"AAAI {year} OJS Archive",
+        url=url, status=200,
+        fields=["title", "authors", "abstract", "pdf_link"],
+        notes=f"AAAI OJS multi-issue (parser_args: AAAI-{yy})",
+        recommended_kind="aaai_ojs_multi_issue",
+        recommended_parser="aaai_ojs_html",
+    )
+
+
+def probe_kdd_official(venue: str, year: int, domain: dict) -> SourceCandidate | None:
+    pattern = domain.get("kdd_official_pattern")
+    if not pattern:
+        return None
+    url = pattern.format(year=year)
+    status = _http_status(url)
+    if status != 200:
+        return SourceCandidate(
+            name=f"KDD {year} Official",
+            url=url, status=status,
+            notes=f"HTTP {status}" if status else "unreachable",
+        )
+    return SourceCandidate(
+        name=f"KDD {year} Official",
+        url=url, status=200,
+        fields=["title", "authors"],
+        notes="KDD official research track page",
+        recommended_kind="kdd_html",
+        recommended_parser="kdd_html",
+    )
+
+
+def probe_kesen_siggraph(venue: str, year: int, domain: dict) -> SourceCandidate | None:
+    pattern = domain.get("kesen_pattern")
+    if not pattern:
+        return None
+    url = pattern.format(year=year)
+    status = _http_status(url)
+    if status != 200:
+        return SourceCandidate(
+            name=f"{venue} {year} Ke-Sen Huang",
+            url=url, status=status,
+            notes=f"HTTP {status}" if status else "unreachable",
+        )
+    return SourceCandidate(
+        name=f"{venue} {year} Ke-Sen Huang",
+        url=url, status=200,
+        fields=["title", "authors", "paper_link", "arxiv_id"],
+        notes="Ke-Sen Huang paper list",
+        recommended_kind="kesen_siggraph_html",
+        recommended_parser="kesen_siggraph_html",
+    )
+
+
+def probe_acmmm_official(venue: str, year: int, domain: dict) -> SourceCandidate | None:
+    keys = ("acmmm_official_pattern", "acmmm_alt_pattern")
+    if not any(domain.get(k) for k in keys):
+        return None
+    for key in keys:
+        pattern = domain.get(key)
+        if not pattern:
+            continue
+        url = pattern.format(year=year)
+        status = _http_status(url)
+        if status == 200:
+            return SourceCandidate(
+                name=f"ACM MM {year} Official",
+                url=url, status=200,
+                fields=["title", "authors"],
+                notes="ACM MM official accepted papers page",
+                recommended_kind="acmmm_html",
+                recommended_parser="acmmm_html",
+            )
+    return SourceCandidate(
+        name=f"ACM MM {year} Official",
+        url=domain.get("acmmm_official_pattern", "").format(year=year),
+        status=0,
+        notes="all known URL patterns unreachable",
+    )
+
+
 def probe_github(venue: str, year: int) -> list[str]:
     queries = [
         f"{venue}{year} accepted",
@@ -247,7 +375,11 @@ def probe_venue_year(venue: str, year: int) -> SourceProbeResult:
         result.github_repos = probe_github(venue, year)
         return result
 
-    for probe_fn in [probe_virtual_json, probe_proceedings, probe_openaccess, probe_virtual_html]:
+    for probe_fn in [
+        probe_virtual_json, probe_proceedings, probe_openaccess,
+        probe_virtual_html, probe_acl_anthology, probe_aaai_ojs,
+        probe_kdd_official, probe_kesen_siggraph, probe_acmmm_official,
+    ]:
         candidate = probe_fn(venue_upper, year, domain)
         if candidate:
             result.candidates.append(candidate)

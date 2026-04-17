@@ -2,7 +2,8 @@
 
 ## AAAI_2024
 
-- status: preserved
+- status: active
+- primary_source: https://ojs.aaai.org/index.php/AAAI/issue/archive
 - primary_records: 2331
 - auxiliary_records: 0
 - merged_records: 2331
@@ -28,15 +29,19 @@
 - auxiliary_records: 0
 - merged_records: 3351
 
+## ACMMM_2024
+
+- status: preserved
+- primary_records: 1150
+- auxiliary_records: 0
+- merged_records: 1150
+
 ## ACMMM_2025
 
-- status: active
-- primary_source: fixture://acmmm_2025_regular.html
-- expected_count: 1250
+- status: preserved
 - primary_records: 1250
 - auxiliary_records: 0
 - merged_records: 1250
-- coverage_gap: 0
 
 ## CVPR_2024
 

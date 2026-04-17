@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 import time
 import urllib.request
 import urllib.parse
@@ -136,3 +137,35 @@ def fetch_aaai_ojs_all_issues(
         time.sleep(0.3)
 
     return combined_html
+
+
+def _http_get(url: str, timeout: int = 60) -> str:
+    req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0", "Accept": "*/*"})
+    with urllib.request.urlopen(req, timeout=timeout) as resp:
+        raw = resp.read()
+        charset = resp.headers.get_content_charset() or "utf-8"
+    return raw.decode(charset, errors="replace")
+
+
+def fetch_acmmm_vue_accepted_chunk(base_url: str, chunk_name: str, timeout: int = 60) -> str:
+    """Load ACM MM Vue SPA accepted-papers chunk: resolve app bundle hash, then chunk hash.
+
+    base_url: e.g. https://2024.acmmm.org (no trailing path required).
+    chunk_name: webpack chunk id for the Accepted Papers route, e.g. chunk-240a60f6.
+    """
+    base = base_url.rstrip("/")
+    index_html = _http_get(base + "/", timeout=timeout)
+    app_m = re.search(r'src="(/js/app\.[a-f0-9]+\.js)"', index_html)
+    if not app_m:
+        app_m = re.search(r"src='(/js/app\.[a-f0-9]+\.js)'", index_html)
+    if not app_m:
+        raise ValueError("Could not find /js/app.[hash].js in ACM MM index HTML")
+    app_path = app_m.group(1)
+    app_js = _http_get(base + app_path, timeout=timeout)
+    chunk_re = re.compile(re.escape(f'"{chunk_name}"') + r':"([a-f0-9]+)"')
+    hm = chunk_re.search(app_js)
+    if not hm:
+        raise ValueError(f'Chunk id "{chunk_name}" not found in app bundle')
+    chunk_path = f"/js/{chunk_name}.{hm.group(1)}.js"
+    print(f"  [acmmm-vue] fetching {base}{chunk_path}")
+    return _http_get(base + chunk_path, timeout=timeout)

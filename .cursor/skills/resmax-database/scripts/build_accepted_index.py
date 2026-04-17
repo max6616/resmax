@@ -10,7 +10,13 @@ PACKAGE_DIR = SCRIPT_DIR / "accepted_index_builder"
 if str(SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPT_DIR))
 
-from accepted_index_builder.fetchers import fetch_json, fetch_openreview_api_v2, fetch_text, fetch_aaai_ojs_all_issues
+from accepted_index_builder.fetchers import (
+    fetch_aaai_ojs_all_issues,
+    fetch_acmmm_vue_accepted_chunk,
+    fetch_json,
+    fetch_openreview_api_v2,
+    fetch_text,
+)
 from accepted_index_builder.merge import load_existing_records, merge_records, write_csv
 from accepted_index_builder.models import AcceptedPaperRecord, ConferenceYearConfig, SourceConfig
 from accepted_index_builder.parsers import parse_payload
@@ -56,6 +62,10 @@ def fetch_and_parse(source: SourceConfig, conf: ConferenceYearConfig, fixtures_d
         year_tag = source.parser_args or f"AAAI-{conf.year % 100}"
         combined_html = fetch_aaai_ojs_all_issues(source.url, year_tag)
         return parse_payload(combined_html, conf, source)
+    if source.kind == "acmmm_vue_accepted":
+        chunk_name = (source.parser_args or "chunk-240a60f6").strip()
+        chunk_js = fetch_acmmm_vue_accepted_chunk(source.url.rstrip("/"), chunk_name)
+        return parse_payload(chunk_js, conf, source)
     if source.kind in ("openreview_api", "virtual_conference_json"):
         payload = fetch_json(source, fixtures_dir)
     else:

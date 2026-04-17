@@ -107,6 +107,10 @@ def _extract_short_seq(short_id: str) -> int:
 
 
 def merge_records(primary_records: list[AcceptedPaperRecord], auxiliary_records: list[AcceptedPaperRecord], existing_records: list[AcceptedPaperRecord]) -> list[AcceptedPaperRecord]:
+    existing_map: dict[tuple[str, int, str], AcceptedPaperRecord] = {}
+    for record in existing_records:
+        existing_map[record_key(record)] = record
+
     merged: dict[tuple[str, int, str], AcceptedPaperRecord] = {}
     for record in primary_records + auxiliary_records:
         key = record_key(record)
@@ -114,6 +118,12 @@ def merge_records(primary_records: list[AcceptedPaperRecord], auxiliary_records:
             merged[key] = merge_prefer_existing(merged[key], record)
         else:
             merged[key] = AcceptedPaperRecord(**record.__dict__)
+
+    for key, record in merged.items():
+        if key in existing_map:
+            record = merge_prefer_existing(record, existing_map[key])
+            merged[key] = merge_prefer_existing(existing_map[key], record)
+
     output = list(merged.values())
     output.sort(key=lambda r: (r.venue.upper(), int(r.year), normalize_title(r.title)))
     return assign_stable_ids(output, existing_records)

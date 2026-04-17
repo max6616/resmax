@@ -698,6 +698,94 @@ def parse_kesen_siggraph_html(raw_html: str, conf: ConferenceYearConfig, source:
     return records
 
 
+def _read_js_string_literal(s: str, quote_idx: int) -> tuple[str, int]:
+    """Read a double-quoted JS string starting at quote_idx; return (value, index_after_closing_quote)."""
+    if quote_idx >= len(s) or s[quote_idx] != '"':
+        raise ValueError("expected opening double quote")
+    i = quote_idx + 1
+    parts: list[str] = []
+    while i < len(s):
+        c = s[i]
+        if c == "\\":
+            i += 1
+            if i < len(s):
+                parts.append(s[i])
+                i += 1
+            continue
+        if c == '"':
+            return "".join(parts), i + 1
+        parts.append(c)
+        i += 1
+    raise ValueError("unterminated JS string")
+
+
+def parse_acmmm_vue_accepted(js_text: str, conf: ConferenceYearConfig, source: SourceConfig) -> list[AcceptedPaperRecord]:
+    """Parse ACM MM site: accepted paper titles/authors embedded in Vue chunk (contents: [...])."""
+    marker_start = js_text.find("contents:[")
+    if marker_start < 0:
+        print(f"  [acmmm-vue] no contents:[ in chunk for {conf.conf_year}")
+        return []
+    arr_open = js_text.find("[", marker_start)
+    depth = 0
+    arr_close = -1
+    for j in range(arr_open, len(js_text)):
+        if js_text[j] == "[":
+            depth += 1
+        elif js_text[j] == "]":
+            depth -= 1
+            if depth == 0:
+                arr_close = j
+                break
+    if arr_close < 0:
+        print(f"  [acmmm-vue] unbalanced contents array for {conf.conf_year}")
+        return []
+    inner = js_text[arr_open + 1 : arr_close]
+
+    title_marker = '{type:"paperTitle",text:"'
+    author_marker = '{type:"paperAuthor",text:"'
+    records: list[AcceptedPaperRecord] = []
+    pos = 0
+    while True:
+        ti = inner.find(title_marker, pos)
+        if ti < 0:
+            break
+        q_title = ti + len(title_marker) - 1
+        title_raw, after_title = _read_js_string_literal(inner, q_title)
+        ai = inner.find(author_marker, after_title)
+        if ai < 0:
+            break
+        q_auth = ai + len(author_marker) - 1
+        authors_raw, pos = _read_js_string_literal(inner, q_auth)
+
+        title_plain = normalize_whitespace(html.unescape(re.sub(r"<[^>]+>", " ", title_raw)))
+        id_m = re.match(r"^(\d{1,5})\s+(.+)$", title_plain, re.DOTALL)
+        if not id_m:
+            continue
+        paper_num = id_m.group(1).strip()
+        title = normalize_whitespace(id_m.group(2))
+        if not title:
+            continue
+        authors_line = normalize_whitespace(html.unescape(re.sub(r"<[^>]+>", " ", authors_raw)))
+        authors_text = "; ".join(a.strip() for a in authors_line.split(",") if a.strip())
+        short_id = f"ACMMM_{conf.year}_{paper_num}"
+        records.append(
+            AcceptedPaperRecord(
+                paper_id=short_id,
+                short_id=short_id,
+                title=title,
+                authors=authors_text,
+                venue=conf.venue,
+                year=conf.year,
+                conf_year=conf.conf_year,
+                source_type=source.kind,
+                source_url=source.url,
+            )
+        )
+
+    print(f"  [acmmm-vue] parsed {len(records)} papers from {conf.conf_year}")
+    return records
+
+
 def parse_acmmm_html(text: str, conf: ConferenceYearConfig, source: SourceConfig) -> list[AcceptedPaperRecord]:
     """Parse ACM MM accepted papers HTML: <p>ID\xa0<b>Title</b><br/>Authors</p>"""
     records: list[AcceptedPaperRecord] = []
@@ -742,6 +830,7 @@ PARSERS: dict[str, Callable[[object, ConferenceYearConfig, SourceConfig], list[A
     "kdd_html": lambda payload, conf, source: parse_kdd_html(str(payload), conf, source),
     "kesen_siggraph_html": lambda payload, conf, source: parse_kesen_siggraph_html(str(payload), conf, source),
     "acmmm_html": lambda payload, conf, source: parse_acmmm_html(str(payload), conf, source),
+    "acmmm_vue_accepted": lambda payload, conf, source: parse_acmmm_vue_accepted(str(payload), conf, source),
 }
 
 

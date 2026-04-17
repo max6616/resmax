@@ -306,6 +306,22 @@
     },
     {
       "venue": "ACMMM",
+      "year": 2024,
+      "conf_year": "ACMMM_2024",
+      "status": "active",
+      "skip_reason": "",
+      "primary_source": {
+        "kind": "acmmm_vue_accepted",
+        "url": "https://2024.acmmm.org",
+        "parser": "acmmm_vue_accepted",
+        "expected_count": 1150,
+        "parser_args": "chunk-240a60f6"
+      },
+      "auxiliary_sources": [],
+      "notes": "Accepted list embedded in Vue webpack chunk (route /accepted-list). title/authors only; use enrich scripts for abstracts."
+    },
+    {
+      "venue": "ACMMM",
       "year": 2025,
       "conf_year": "ACMMM_2025",
       "status": "active",
