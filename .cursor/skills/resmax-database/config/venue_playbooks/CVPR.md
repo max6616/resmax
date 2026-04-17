@@ -23,3 +23,19 @@
 |------|--------|-------|
 | 2024 | `cvpr_openaccess_html` | |
 | 2025 | `cvpr_openaccess_html` | |
+| 2026 | `virtual_conference_json` | First year with virtual JSON; has abstracts |
+
+## Lessons Learned
+
+- Starting with CVPR 2026, the EventHosts virtual conference platform (same as ICLR/NeurIPS/ICML) provides a JSON endpoint: `https://cvpr.thecvf.com/static/virtual/data/cvpr-{year}-orals-posters.json`
+- This JSON includes abstracts, which CVF OpenAccess does NOT provide — making it the preferred primary source when available
+- The JSON becomes available after decisions are released (Feb/Mar), well before the conference and before CVF OpenAccess goes live
+- The `virtual_conference_json` parser handles this format (shared with ICLR/NeurIPS/ICML)
+- OpenReview API is locked for CVPR (403 Forbidden), unlike ICLR which exposes submissions publicly
+- CVPR 2026 introduced a Findings track — the JSON may include both main conference and findings papers
+- Decision values: `Accept (Oral)`, `Accept (Highlight)`, `Accept (Poster)`
+
+## Updated Source Priority
+
+1. Virtual Conference JSON (has abstract, available pre-conference) — preferred for 2026+
+2. CVF OpenAccess (no abstract, available around/after conference) — used for 2024-2025

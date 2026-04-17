@@ -18,3 +18,11 @@
 |------|--------|-------------|-------------|
 | 2024 | `virtual_conference_json` | iclr-2024-orals-posters.json | 2382 |
 | 2025 | `virtual_conference_json` | iclr-2025-orals-posters.json | 4040 |
+| 2026 | `virtual_conference_json` | iclr-2026-orals-posters.json | 5695 |
+
+## Lessons Learned
+
+- Virtual conference JSON can be available BEFORE the conference takes place (confirmed for 2026: decisions out, conference not held, JSON already live)
+- OpenReview API v2 venue strings: `ICLR {YEAR} Oral` / `ICLR {YEAR} Poster` (capitalized decision type)
+- Virtual JSON `decision` field values: `Accept (Oral)` and `Accept (Poster)`
+- Paper count trend: 2024=2382, 2025=4040, 2026=5695 (~40-70% YoY growth)

@@ -41,11 +41,16 @@
       "venue": "ICLR",
       "year": 2026,
       "conf_year": "ICLR_2026",
-      "status": "skip",
-      "skip_reason": "Not yet available (conference in 2026).",
-      "primary_source": { "kind": "", "url": "", "parser": "", "expected_count": null },
+      "status": "active",
+      "skip_reason": "",
+      "primary_source": {
+        "kind": "virtual_conference_json",
+        "url": "https://iclr.cc/static/virtual/data/iclr-2026-orals-posters.json",
+        "parser": "virtual_conference_json",
+        "expected_count": 5695
+      },
       "auxiliary_sources": [],
-      "notes": ""
+      "notes": "Virtual conference JSON live before conference. Abstracts included. ~5695 entries (449 oral + 5246 poster)."
     },
     {
       "venue": "NeurIPS",
@@ -136,6 +141,21 @@
       },
       "auxiliary_sources": [],
       "notes": "CVF OpenAccess (fixture). title/authors/pdf. No abstract."
+    },
+    {
+      "venue": "CVPR",
+      "year": 2026,
+      "conf_year": "CVPR_2026",
+      "status": "active",
+      "skip_reason": "",
+      "primary_source": {
+        "kind": "virtual_conference_json",
+        "url": "https://cvpr.thecvf.com/static/virtual/data/cvpr-2026-orals-posters.json",
+        "parser": "virtual_conference_json",
+        "expected_count": 4212
+      },
+      "auxiliary_sources": [],
+      "notes": "Virtual conference JSON (EventHosts). 4212 papers (282 oral + 575 highlight + 3355 poster). Has abstracts. First CVPR year using virtual JSON instead of CVF OpenAccess."
     },
     {
       "venue": "ECCV",

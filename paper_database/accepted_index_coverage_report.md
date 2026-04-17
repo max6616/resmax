@@ -2,8 +2,7 @@
 
 ## AAAI_2024
 
-- status: active
-- primary_source: https://ojs.aaai.org/index.php/AAAI/issue/archive
+- status: preserved
 - primary_records: 2331
 - auxiliary_records: 0
 - merged_records: 2331
@@ -57,6 +56,16 @@
 - auxiliary_records: 0
 - merged_records: 2871
 
+## CVPR_2026
+
+- status: active
+- primary_source: https://cvpr.thecvf.com/static/virtual/data/cvpr-2026-orals-posters.json
+- expected_count: 4212
+- primary_records: 4212
+- auxiliary_records: 0
+- merged_records: 4071
+- coverage_gap: 0
+
 ## ECCV_2024
 
 - status: preserved
@@ -91,6 +100,13 @@
 - primary_records: 3830
 - auxiliary_records: 0
 - merged_records: 3830
+
+## ICLR_2026
+
+- status: preserved
+- primary_records: 5471
+- auxiliary_records: 0
+- merged_records: 5471
 
 ## ICML_2024
 
