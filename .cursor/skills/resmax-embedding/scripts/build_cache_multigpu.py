@@ -98,17 +98,53 @@ def main():
     with open(args.accepted, "r", encoding="utf-8") as f:
         rows = list(csv.DictReader(f))
 
-    paper_ids = [r.get("paper_id", "") for r in rows]
-    texts = []
+    all_paper_ids = [r.get("paper_id", "") for r in rows]
+    all_texts = []
     for r in rows:
         t = r.get("title", "").strip()
         a = r.get("abstract_raw", "").strip()
         text = t + ("\n" + a if a else "")
         if args.instruction:
             text = args.instruction + text
-        texts.append(text)
+        all_texts.append(text)
 
-    print(f"[main] {len(texts)} papers loaded")
+    print(f"[main] {len(all_texts)} papers loaded")
+
+    out_path = Path(args.out)
+    existing_embs = None
+    existing_ids = None
+    full_rebuild = False
+
+    if out_path.exists():
+        try:
+            cache = np.load(out_path, allow_pickle=True)
+            existing_embs = cache["embeddings"]
+            existing_ids = list(cache["paper_ids"])
+            cached_dim = existing_embs.shape[1]
+            target_dim = args.dim if args.dim > 0 else None
+            if target_dim and cached_dim != target_dim:
+                print(f"[main] dimension mismatch: cache={cached_dim}, target={target_dim}. Full rebuild.")
+                full_rebuild = True
+                existing_embs = None
+                existing_ids = None
+            else:
+                print(f"[main] existing cache: {existing_embs.shape[0]} papers, dim={cached_dim}")
+        except Exception as e:
+            print(f"[main] failed to load existing cache: {e}. Full rebuild.")
+            full_rebuild = True
+
+    if existing_ids and not full_rebuild:
+        existing_set = set(existing_ids)
+        new_indices = [i for i, pid in enumerate(all_paper_ids) if pid not in existing_set]
+        if not new_indices:
+            print(f"[main] cache is up-to-date, nothing to encode.")
+            return
+        paper_ids = [all_paper_ids[i] for i in new_indices]
+        texts = [all_texts[i] for i in new_indices]
+        print(f"[main] incremental: {len(new_indices)} new papers to encode, {len(existing_ids)} cached")
+    else:
+        paper_ids = all_paper_ids
+        texts = all_texts
 
     gpu_ids = [int(g) for g in args.gpus.split(",")]
     num_gpus = len(gpu_ids)
@@ -149,30 +185,39 @@ def main():
         shards.append(np.load(shard_path))
         os.remove(shard_path)
     os.rmdir(shard_dir)
-    all_embeddings = np.vstack(shards)
+    new_embeddings = np.vstack(shards)
 
-    if args.dim and all_embeddings.shape[1] > args.dim:
-        all_embeddings = all_embeddings[:, :args.dim]
-        norms = np.linalg.norm(all_embeddings, axis=1, keepdims=True)
+    if args.dim and new_embeddings.shape[1] > args.dim:
+        new_embeddings = new_embeddings[:, :args.dim]
+        norms = np.linalg.norm(new_embeddings, axis=1, keepdims=True)
         norms[norms == 0] = 1.0
-        all_embeddings = all_embeddings / norms
+        new_embeddings = new_embeddings / norms
         print(f"[main] truncated to dim={args.dim}")
+
+    # Merge with existing cache if incremental
+    if existing_embs is not None and not full_rebuild:
+        all_embeddings = np.vstack([existing_embs, new_embeddings])
+        final_paper_ids = existing_ids + paper_ids
+        print(f"[main] merged: {existing_embs.shape[0]} existing + {new_embeddings.shape[0]} new = {all_embeddings.shape[0]} total")
+    else:
+        all_embeddings = new_embeddings
+        final_paper_ids = paper_ids
 
     out_path = Path(args.out)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     np.savez_compressed(
         out_path,
         embeddings=all_embeddings.astype(np.float32),
-        paper_ids=np.array(paper_ids, dtype=object),
+        paper_ids=np.array(final_paper_ids, dtype=object),
         meta=json.dumps({
             "model_name": args.model,
             "dimension": all_embeddings.shape[1],
-            "count": len(paper_ids),
+            "count": len(final_paper_ids),
         }),
     )
     size_mb = out_path.stat().st_size / (1024 * 1024)
     print(f"[main] saved: {out_path} ({size_mb:.1f} MB), shape: {all_embeddings.shape}")
-    print(f"[main] throughput: {len(texts) / elapsed:.0f} papers/s")
+    print(f"[main] throughput: {len(texts) / elapsed:.0f} papers/s (encoded {len(texts)} new)")
 
 
 if __name__ == "__main__":
