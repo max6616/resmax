@@ -300,7 +300,7 @@ print(f'{has}/{len(rows)} ({has/len(rows)*100:.1f}%)')
 | `year` | int | 年份 |
 | `conf_year` | string | 会议-年份标识（如 `ICLR_2025`） |
 | `title` | string | 论文标题 |
-| `authors` | string | 作者列表 |
+| `authors` | string | 作者列表（分号分隔） |
 | `source_type` | string | 数据源类型 |
 | `source_url` | string | 数据源 URL |
 | `paper_link` | string | 论文页面链接 |
@@ -311,6 +311,25 @@ print(f'{has}/{len(rows)} ({has/len(rows)*100:.1f}%)')
 | `doi` | string | DOI |
 | `openreview_forum_id` | string | OpenReview forum ID |
 | `has_pdf_camera_ready` | bool | 是否有 camera-ready PDF |
+| `decision` | string | 原始录用决定（标准化大小写，如 `Accept (Poster)`、`Accept (Oral)`） |
+| `acceptance_type` | string | 标准化录用等级：`Oral` / `Spotlight` / `Highlight` / `Poster` / `Accept`。从 decision + event_type 推断 |
+| `topic` | string | 论文主题分类（如 `Applications->Robotics`） |
+| `code_url` | string | 代码链接 |
+| `paper_url` | string | 论文 URL（通常为 OpenReview 链接） |
+| `virtual_id` | string | 虚拟会议平台内部 ID |
+| `virtual_uid` | string | 虚拟会议平台 UID |
+| `virtualsite_url` | string | 虚拟会议页面路径（如 `/virtual/2024/poster/18969`） |
+| `sourceid` | string | 数据源 ID（如 OpenReview source ID） |
+| `sourceurl` | string | 数据源 URL（如 OpenReview group URL） |
+| `session` | string | 展示 session（如 `Poster Session 4`） |
+| `eventtype` | string | 事件类型（如 `Poster`、`Oral`） |
+| `event_type` | string | 细粒度事件类型（如 `Spotlight Poster`、`Oral Poster`） |
+| `room_name` | string | 展示房间 |
+| `starttime` | string | 展示开始时间（ISO 8601） |
+| `endtime` | string | 展示结束时间（ISO 8601） |
+| `poster_position` | string | 海报位置编号 |
+
+注：`virtual_id` ~ `poster_position` 字段仅 `virtual_conference_json` 数据源有值，其他数据源为空。
 
 ## 新增会议流程
 
@@ -368,3 +387,21 @@ print(f'{has}/{len(rows)} ({has/len(rows)*100:.1f}%)')
 - 流程步骤的增删改
 
 判断标准：**如果经验只对某个 venue 有用 → Layer 1；只对某个 venue-year 有用 → Layer 2；对所有会议通用 → Layer 3**。
+
+## 已沉淀经验（Layer 3）
+
+### 全量重建的并发控制
+
+`build_accepted_index.py` 在全量模式下会直接重写 `paper_database/accepted_index.csv` 与 `paper_database/accepted_index_coverage_report.md`。同一工作区内禁止并发启动多个全量重建任务；否则多个进程会竞争写同一产物，导致最终 CSV 来源不确定、coverage report 与终端日志不对应，难以判断真实故障点。
+
+建议做法：任一时刻只保留一个权威全量重建任务，其余历史任务只作为参考日志；需要实时监控时，绑定到这一个任务持续观察 `FAILED`、`0 records`、超时和最终 total records。
+
+### 录用等级（acceptance_type）标准化
+
+virtual conference JSON 的 `decision` 字段大小写极不统一（如 `Accept (poster)` vs `Accept (Poster)` vs `Accept (oral)` vs `Accept (Oral)`），同一会议同一年份内都可能混用。`_normalize_decision()` 统一为 `Accept (Poster)` 格式（括号内 Title Case）。
+
+`acceptance_type` 字段从 decision → event_type → eventtype 三级回退推断，标准化为 `Oral` / `Spotlight` / `Highlight` / `Poster` / `Accept` 五个值。特殊情况：
+- ECCV 2024 的 decision 全为空，但 event_type 有 Poster/Oral，可正确回退
+- CVPR 2026 引入了 `Highlight` 等级（介于 Oral 和 Poster 之间）
+- NeurIPS 2025 的 event_type 含 `{location}` 占位符（如 `{location} Poster`），不影响推断
+- ICML 2025 有 `Accept (spotlight poster)` 变体，标准化为 Spotlight

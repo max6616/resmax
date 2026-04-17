@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import re
+import signal
 import time
 import urllib.request
 import urllib.parse
@@ -10,17 +11,40 @@ from pathlib import Path
 from .models import SourceConfig
 
 
+class _FetchTimeout(Exception):
+    pass
+
+
+def _fetch_with_total_timeout(url: str, headers: dict, socket_timeout: int = 30, total_timeout: int = 120) -> bytes:
+    """Fetch URL with both per-socket and total wall-clock timeout."""
+    old_handler = signal.getsignal(signal.SIGALRM)
+    def _alarm(signum, frame):
+        raise _FetchTimeout(f"total timeout {total_timeout}s exceeded for {url}")
+    signal.signal(signal.SIGALRM, _alarm)
+    signal.alarm(total_timeout)
+    try:
+        req = urllib.request.Request(url, headers=headers)
+        with urllib.request.urlopen(req, timeout=socket_timeout) as resp:
+            data = resp.read()
+        return data
+    finally:
+        signal.alarm(0)
+        signal.signal(signal.SIGALRM, old_handler)
+
+
 def fetch_text(source: SourceConfig, fixtures_dir: Path, timeout: int = 60) -> str:
     url = source.url
     if url.startswith("fixture://"):
         rel = url[len("fixture://"):]
         return (fixtures_dir / rel).read_text(encoding="utf-8")
 
-    req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0", "Accept": "text/html,application/json,*/*"})
-    with urllib.request.urlopen(req, timeout=timeout) as resp:
-        raw = resp.read()
-        charset = resp.headers.get_content_charset() or "utf-8"
-    return raw.decode(charset, errors="replace")
+    raw = _fetch_with_total_timeout(
+        url,
+        headers={"User-Agent": "Mozilla/5.0", "Accept": "text/html,application/json,*/*"},
+        socket_timeout=timeout,
+        total_timeout=max(timeout * 3, 120),
+    )
+    return raw.decode("utf-8", errors="replace")
 
 
 def fetch_json(source: SourceConfig, fixtures_dir: Path, timeout: int = 30) -> dict:
@@ -52,14 +76,16 @@ def fetch_openreview_api_v2(
             "offset": offset,
         })
         url = f"{base}?{params}"
-        req = urllib.request.Request(url, headers={
-            "User-Agent": "resmax-accepted-index/1.0",
-            "Accept": "application/json",
-        })
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
-            raw = resp.read()
-            charset = resp.headers.get_content_charset() or "utf-8"
-        data = json.loads(raw.decode(charset, errors="replace"))
+        raw = _fetch_with_total_timeout(
+            url,
+            headers={
+                "User-Agent": "resmax-accepted-index/1.0",
+                "Accept": "application/json",
+            },
+            socket_timeout=timeout,
+            total_timeout=max(timeout * 2, 90),
+        )
+        data = json.loads(raw.decode("utf-8", errors="replace"))
 
         notes = data.get("notes", [])
         if total is None:
@@ -94,14 +120,16 @@ def fetch_aaai_ojs_all_issues(
     import re as _re
 
     def _get(url: str) -> str:
-        req = urllib.request.Request(url, headers={
-            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)",
-            "Accept": "text/html,*/*",
-        })
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
-            raw = resp.read()
-            charset = resp.headers.get_content_charset() or "utf-8"
-        return raw.decode(charset, errors="replace")
+        raw = _fetch_with_total_timeout(
+            url,
+            headers={
+                "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)",
+                "Accept": "text/html,*/*",
+            },
+            socket_timeout=timeout,
+            total_timeout=max(timeout * 2, 90),
+        )
+        return raw.decode("utf-8", errors="replace")
 
     all_issue_urls: list[str] = []
     page = 1
@@ -140,11 +168,13 @@ def fetch_aaai_ojs_all_issues(
 
 
 def _http_get(url: str, timeout: int = 60) -> str:
-    req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0", "Accept": "*/*"})
-    with urllib.request.urlopen(req, timeout=timeout) as resp:
-        raw = resp.read()
-        charset = resp.headers.get_content_charset() or "utf-8"
-    return raw.decode(charset, errors="replace")
+    raw = _fetch_with_total_timeout(
+        url,
+        headers={"User-Agent": "Mozilla/5.0", "Accept": "*/*"},
+        socket_timeout=timeout,
+        total_timeout=max(timeout * 3, 120),
+    )
+    return raw.decode("utf-8", errors="replace")
 
 
 def fetch_acmmm_vue_accepted_chunk(base_url: str, chunk_name: str, timeout: int = 60) -> str:

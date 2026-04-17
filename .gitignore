@@ -22,6 +22,7 @@ env/
 
 # === Large data / cache (not suitable for git) ===
 paper_database/accepted_index.csv
+paper_database/accepted_index_*.csv
 paper_database/accepted_index.csv.bak*
 paper_database/embedding_cache/
 

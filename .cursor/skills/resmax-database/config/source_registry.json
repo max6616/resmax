@@ -124,8 +124,15 @@
         "parser": "cvpr_openaccess_html",
         "expected_count": 2720
       },
-      "auxiliary_sources": [],
-      "notes": "CVF OpenAccess. title/authors/pdf. No abstract."
+      "auxiliary_sources": [
+        {
+          "kind": "virtual_conference_json",
+          "url": "https://cvpr.thecvf.com/static/virtual/data/cvpr-2024-orals-posters.json",
+          "parser": "virtual_conference_json",
+          "expected_count": 2806
+        }
+      ],
+      "notes": "CVF OpenAccess primary (pdf/arxiv links). VC JSON auxiliary (decision/abstract/acceptance_type). VC JSON has 2806 papers (90 oral + 324 highlight + 2302 poster)."
     },
     {
       "venue": "CVPR",
@@ -139,8 +146,15 @@
         "parser": "cvpr_openaccess_html",
         "expected_count": 2871
       },
-      "auxiliary_sources": [],
-      "notes": "CVF OpenAccess (fixture). title/authors/pdf. No abstract."
+      "auxiliary_sources": [
+        {
+          "kind": "virtual_conference_json",
+          "url": "https://cvpr.thecvf.com/static/virtual/data/cvpr-2025-orals-posters.json",
+          "parser": "virtual_conference_json",
+          "expected_count": 2966
+        }
+      ],
+      "notes": "CVF OpenAccess primary (pdf/arxiv links). VC JSON auxiliary (abstract/event_type). VC JSON decision is None; event_type has Oral(95)/Poster(2871) but no highlight info."
     },
     {
       "venue": "CVPR",
@@ -184,8 +198,15 @@
         "parser": "cvpr_openaccess_html",
         "expected_count": null
       },
-      "auxiliary_sources": [],
-      "notes": "CVF OpenAccess. title/authors/pdf. No abstract. Count TBD after first build."
+      "auxiliary_sources": [
+        {
+          "kind": "virtual_conference_json",
+          "url": "https://iccv.thecvf.com/static/virtual/data/iccv-2025-orals-posters.json",
+          "parser": "virtual_conference_json",
+          "expected_count": 2765
+        }
+      ],
+      "notes": "CVF OpenAccess primary (pdf/arxiv links). VC JSON auxiliary (decision/abstract/acceptance_type). VC JSON: 128 oral + 263 highlight + 2374 poster = 2765."
     },
     {
       "venue": "ACL",

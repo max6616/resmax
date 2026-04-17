@@ -24,6 +24,23 @@ FIELDNAMES = [
     "doi",
     "openreview_forum_id",
     "has_pdf_camera_ready",
+    "decision",
+    "acceptance_type",
+    "topic",
+    "code_url",
+    "paper_url",
+    "virtual_id",
+    "virtual_uid",
+    "virtualsite_url",
+    "sourceid",
+    "sourceurl",
+    "session",
+    "eventtype",
+    "event_type",
+    "room_name",
+    "starttime",
+    "endtime",
+    "poster_position",
 ]
 
 
@@ -49,27 +66,14 @@ def load_existing_records(path: Path) -> list[AcceptedPaperRecord]:
     with path.open("r", encoding="utf-8", newline="") as f:
         reader = csv.DictReader(f)
         for row in reader:
-            records.append(
-                AcceptedPaperRecord(
-                    paper_id=row.get("paper_id", ""),
-                    short_id=row.get("short_id", ""),
-                    venue=row.get("venue", ""),
-                    year=int(row.get("year", 0) or 0),
-                    conf_year=row.get("conf_year", ""),
-                    title=row.get("title", ""),
-                    authors=row.get("authors", ""),
-                    source_type=row.get("source_type", ""),
-                    source_url=row.get("source_url", ""),
-                    paper_link=row.get("paper_link", ""),
-                    arxiv_id=row.get("arxiv_id", ""),
-                    arxiv_url=row.get("arxiv_url", ""),
-                    keywords_raw=row.get("keywords_raw", ""),
-                    abstract_raw=row.get("abstract_raw", ""),
-                    doi=row.get("doi", ""),
-                    openreview_forum_id=row.get("openreview_forum_id", ""),
-                    has_pdf_camera_ready=row.get("has_pdf_camera_ready", ""),
-                )
-            )
+            kwargs = {}
+            for field in FIELDNAMES:
+                val = row.get(field, "")
+                if field == "year":
+                    kwargs[field] = int(val or 0)
+                else:
+                    kwargs[field] = val or ""
+            records.append(AcceptedPaperRecord(**kwargs))
     return records
 
 

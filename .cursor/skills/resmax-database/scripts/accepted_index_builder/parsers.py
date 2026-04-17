@@ -43,6 +43,7 @@ def parse_openreview_notes_json(payload: dict, conf: ConferenceYearConfig, sourc
             abstract_raw=normalize_whitespace(str(content.get("abstract", ""))),
             openreview_forum_id=normalize_whitespace(str(item.get("id", ""))),
             has_pdf_camera_ready="true" if paper_link else "",
+            decision="Accept",
         )
         records.append(record)
     return records
@@ -65,6 +66,7 @@ def parse_simple_html_paper_list(text: str, conf: ConferenceYearConfig, source: 
                 source_url=source.url,
                 paper_link=normalize_link(href),
                 has_pdf_camera_ready="true" if href else "",
+                decision="Accept",
             )
         )
     return records
@@ -90,6 +92,7 @@ def parse_curated_markdown_links(text: str, conf: ConferenceYearConfig, source: 
                 arxiv_url=f"https://arxiv.org/abs/{arxiv_id}" if arxiv_id else "",
                 openreview_forum_id=extract_openreview_forum_id(normalized),
                 has_pdf_camera_ready="",
+                decision="Accept",
             )
         )
     return records
@@ -164,6 +167,7 @@ def parse_cvpr_openaccess_html(text: str, conf: ConferenceYearConfig, source: So
                 abstract_raw="",
                 openreview_forum_id="",
                 has_pdf_camera_ready="true" if pdf_url else "",
+                decision="Accept",
             )
         )
     return records
@@ -194,6 +198,7 @@ def parse_iclr_virtual_html(text: str, conf: ConferenceYearConfig, source: Sourc
                 abstract_raw="",
                 openreview_forum_id="",
                 has_pdf_camera_ready="",
+                decision="Accept",
             )
         )
     return records
@@ -204,15 +209,125 @@ def _conference_base_url(venue: str) -> str:
         "ICLR": "https://iclr.cc",
         "NEURIPS": "https://neurips.cc",
         "ICML": "https://icml.cc",
+        "CVPR": "https://cvpr.thecvf.com",
+        "ECCV": "https://eccv.ecva.net",
+        "ICCV": "https://iccv.thecvf.com",
     }
     return mapping.get(venue.upper(), "")
+
+
+def _normalize_decision(raw: str) -> str:
+    """Normalize decision strings to canonical form.
+
+    Keeps the semantic content but normalizes casing/whitespace.
+    Examples:
+      "Accept (poster)"          -> "Accept (Poster)"
+      "Accept (oral)"            -> "Accept (Oral)"
+      "Accept (spotlight)"       -> "Accept (Spotlight)"
+      "Accept (Highlight)"       -> "Accept (Highlight)"
+      "Accept (spotlight poster)" -> "Accept (Spotlight Poster)"
+      "Accept: Oral"             -> "Accept (Oral)"
+      "Accept: Poster (Highlight)" -> "Accept (Highlight)"
+      "poster"                   -> "Accept (Poster)"
+      "oral"                     -> "Accept (Oral)"
+      "highlight"                -> "Accept (Highlight)"
+    """
+    if not raw:
+        return ""
+    stripped = raw.strip()
+    if not stripped:
+        return ""
+    import re as _re
+
+    m = _re.match(r"(?i)^accept\s*\((.+)\)$", stripped)
+    if m:
+        inner = m.group(1).strip().title()
+        return f"Accept ({inner})"
+
+    m = _re.match(r"(?i)^accept\s*:\s*(.+)$", stripped)
+    if m:
+        rest = m.group(1).strip()
+        paren_m = _re.match(r"(?i)^poster\s*\((.+)\)$", rest)
+        if paren_m:
+            inner = paren_m.group(1).strip().title()
+            return f"Accept ({inner})"
+        return f"Accept ({rest.title()})"
+
+    low = stripped.lower()
+    if low in ("oral", "poster", "spotlight", "highlight"):
+        return f"Accept ({stripped.title()})"
+
+    if low.startswith("accept"):
+        return "Accept"
+    return stripped
+
+
+def _infer_acceptance_type(decision: str, event_type: str, eventtype: str) -> str:
+    """Infer standardized acceptance type from decision/event_type/eventtype.
+
+    Returns one of: Oral, Spotlight, Highlight, Poster, Accept, or "".
+    Priority: decision > event_type > eventtype.
+    """
+    low = (decision or "").lower()
+    if "oral" in low:
+        return "Oral"
+    if "spotlight" in low:
+        return "Spotlight"
+    if "highlight" in low:
+        return "Highlight"
+    if "poster" in low:
+        return "Poster"
+
+    et_low = (event_type or "").lower()
+    if "oral" in et_low and "poster" not in et_low:
+        return "Oral"
+    if "spotlight" in et_low:
+        return "Spotlight"
+    if "highlight" in et_low:
+        return "Highlight"
+
+    evt_low = (eventtype or "").lower()
+    if "oral" in evt_low:
+        return "Oral"
+    if "poster" in evt_low:
+        return "Poster"
+
+    if low.startswith("accept"):
+        return "Accept"
+    return ""
+
+
+def _acl_decision_from_id(paper_id: str, venue: str) -> str:
+    """Infer ACL/EMNLP decision from Anthology paper ID.
+
+    Examples:
+      2024.acl-long.123  -> Main Long
+      2024.findings-acl.456 -> Findings
+      2024.emnlp-main.789 -> Main
+      2024.acl-srw.12 -> SRW
+      2024.acl-demo.34 -> Demo
+      2024.acl-industry.56 -> Industry
+    """
+    low = paper_id.lower()
+    if "findings" in low:
+        return "Findings"
+    if "-long." in low or "-main." in low:
+        return "Main"
+    if "-short." in low:
+        return "Main Short"
+    if "-industry." in low:
+        return "Industry"
+    if "-demo." in low:
+        return "Demo"
+    if "-srw." in low:
+        return "SRW"
+    return "Accept"
 
 
 def parse_virtual_conference_json(payload: dict, conf: ConferenceYearConfig, source: SourceConfig) -> list[AcceptedPaperRecord]:
     """Parse the unified JSON from EventHosts virtual conference platforms.
 
-    Works for ICLR, NeurIPS, ICML, etc. The JSON has structure:
-    {"count": N, "results": [{"name": ..., "authors": [...], "abstract": ..., ...}, ...]}
+    Works for ICLR, NeurIPS, ICML, CVPR, ECCV, etc.
     """
     import json as _json
 
@@ -259,6 +374,16 @@ def parse_virtual_conference_json(payload: dict, conf: ConferenceYearConfig, sou
         else:
             keywords_raw = normalize_whitespace(str(keywords_list))
 
+        raw_decision = (item.get("decision") or "")
+        decision = _normalize_decision(raw_decision)
+        raw_eventtype = normalize_whitespace(str(item.get("eventtype", "") or ""))
+        raw_event_type = normalize_whitespace(str(item.get("event_type", "") or ""))
+        acceptance_type = _infer_acceptance_type(raw_decision, raw_event_type, raw_eventtype)
+
+        paper_url_field = (item.get("paper_url", "") or "").strip()
+        if not openreview_id and paper_url_field:
+            openreview_id = extract_openreview_forum_id(paper_url_field)
+
         records.append(
             AcceptedPaperRecord(
                 venue=conf.venue,
@@ -275,6 +400,23 @@ def parse_virtual_conference_json(payload: dict, conf: ConferenceYearConfig, sou
                 abstract_raw=abstract_raw,
                 openreview_forum_id=openreview_id,
                 has_pdf_camera_ready="true" if pdf_url else "",
+                decision=decision,
+                acceptance_type=acceptance_type,
+                topic=normalize_whitespace(str(item.get("topic", "") or "")),
+                code_url=(item.get("url", "") or "").strip(),
+                paper_url=paper_url_field,
+                virtual_id=str(item.get("id", "") or ""),
+                virtual_uid=str(item.get("uid", "") or ""),
+                virtualsite_url=vsite_url,
+                sourceid=str(item.get("sourceid", "") or ""),
+                sourceurl=source_url_field,
+                session=normalize_whitespace(str(item.get("session", "") or "")),
+                eventtype=raw_eventtype,
+                event_type=raw_event_type,
+                room_name=normalize_whitespace(str(item.get("room_name", "") or "")),
+                starttime=(item.get("starttime", "") or "").strip(),
+                endtime=(item.get("endtime", "") or "").strip(),
+                poster_position=normalize_whitespace(str(item.get("poster_position", "") or "")),
             )
         )
 
@@ -334,6 +476,7 @@ def parse_openreview_api_v2(payload: dict, conf: ConferenceYearConfig, source: S
                 abstract_raw=abstract_text,
                 openreview_forum_id=forum_id,
                 has_pdf_camera_ready="true" if pdf_url else "",
+                decision="Accept",
             )
         )
     return records
@@ -376,6 +519,7 @@ def parse_iclr_proceedings_html(text: str, conf: ConferenceYearConfig, source: S
                 abstract_raw="",
                 openreview_forum_id="",
                 has_pdf_camera_ready="true",
+                decision="Accept",
             )
         )
     return records
@@ -441,6 +585,7 @@ def parse_aaai_ojs_html(text: str, conf: ConferenceYearConfig, source: SourceCon
                 source_url=source.url,
                 paper_link=pdf_url or normalize_link(article_url),
                 has_pdf_camera_ready="true" if pdf_url else "",
+                decision="Accept",
             )
         )
     return records
@@ -487,6 +632,7 @@ def parse_kdd_html(text: str, conf: ConferenceYearConfig, source: SourceConfig) 
                     source_url=source.url,
                     paper_link=normalize_link(doi_url) if doi_url else "",
                     has_pdf_camera_ready="",
+                    decision="Accept",
                 )
             )
         i += 1
@@ -518,6 +664,7 @@ def parse_neurips_virtual_html(text: str, conf: ConferenceYearConfig, source: So
                 abstract_raw="",
                 openreview_forum_id="",
                 has_pdf_camera_ready="",
+                decision="Accept",
             )
         )
     return records
@@ -609,6 +756,7 @@ def parse_acl_anthology_html(text: str, conf: ConferenceYearConfig, source: Sour
                 abstract_raw=abstract,
                 openreview_forum_id="",
                 has_pdf_camera_ready="true",
+                decision=_acl_decision_from_id(paper_id, conf.venue),
             )
         )
     return records
@@ -692,6 +840,7 @@ def parse_kesen_siggraph_html(raw_html: str, conf: ConferenceYearConfig, source:
             abstract_raw="",
             openreview_forum_id="",
             has_pdf_camera_ready="yes" if acm_doi else "",
+            decision="Accept",
         ))
 
     print(f"  [kesen-siggraph] parsed {len(records)} papers from {conf.conf_year}")
@@ -779,6 +928,7 @@ def parse_acmmm_vue_accepted(js_text: str, conf: ConferenceYearConfig, source: S
                 conf_year=conf.conf_year,
                 source_type=source.kind,
                 source_url=source.url,
+                decision="Accept",
             )
         )
 
@@ -811,6 +961,7 @@ def parse_acmmm_html(text: str, conf: ConferenceYearConfig, source: SourceConfig
             conf_year=conf.conf_year,
             source_type=source.kind,
             source_url=source.url,
+            decision="Accept",
         ))
     print(f"  [acmmm-html] parsed {len(records)} papers from {conf.conf_year}")
     return records

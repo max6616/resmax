@@ -44,6 +44,23 @@ class AcceptedPaperRecord:
     doi: str = ""
     openreview_forum_id: str = ""
     has_pdf_camera_ready: str = ""
+    decision: str = ""
+    acceptance_type: str = ""
+    topic: str = ""
+    code_url: str = ""
+    paper_url: str = ""
+    virtual_id: str = ""
+    virtual_uid: str = ""
+    virtualsite_url: str = ""
+    sourceid: str = ""
+    sourceurl: str = ""
+    session: str = ""
+    eventtype: str = ""
+    event_type: str = ""
+    room_name: str = ""
+    starttime: str = ""
+    endtime: str = ""
+    poster_position: str = ""
 
 
 @dataclass

@@ -88,12 +88,19 @@ def main() -> int:
     configs = load_registry(registry_path)
     selected = [c for c in configs if should_include(c, venues, years, conf_years)]
 
+    import time
+    print(f"[build] loading existing CSV ...", flush=True)
+    t0 = time.time()
     existing_records = load_existing_records(out_path)
+    print(f"[build] loaded {len(existing_records)} existing records in {time.time()-t0:.1f}s", flush=True)
+    print(f"[build] {len(selected)} conf-years to process", flush=True)
+
     final_records: list[AcceptedPaperRecord] = []
     report_sections: list[dict] = []
 
-    for conf in selected:
+    for idx, conf in enumerate(selected, 1):
         if conf.status == "skip":
+            print(f"[{idx}/{len(selected)}] {conf.conf_year}: SKIP ({conf.skip_reason})", flush=True)
             report_sections.append({
                 "conf_year": conf.conf_year,
                 "status": "skip",
@@ -106,21 +113,31 @@ def main() -> int:
             continue
 
         errors: list[str] = []
+        print(f"[{idx}/{len(selected)}] {conf.conf_year}: fetching primary ({conf.primary_source.kind}) ...", flush=True)
+        t1 = time.time()
         try:
             primary_records = fetch_and_parse(conf.primary_source, conf, fixtures_dir)
+            print(f"  primary: {len(primary_records)} records in {time.time()-t1:.1f}s", flush=True)
         except Exception as exc:
             primary_records = []
             errors.append(f"primary source failed: {exc}")
+            print(f"  primary FAILED in {time.time()-t1:.1f}s: {exc}", flush=True)
 
         auxiliary_records: list[AcceptedPaperRecord] = []
-        for source in conf.auxiliary_sources:
+        for si, source in enumerate(conf.auxiliary_sources):
+            print(f"  auxiliary[{si}] ({source.kind}) ...", flush=True)
+            t2 = time.time()
             try:
-                auxiliary_records.extend(fetch_and_parse(source, conf, fixtures_dir))
+                recs = fetch_and_parse(source, conf, fixtures_dir)
+                auxiliary_records.extend(recs)
+                print(f"  auxiliary[{si}]: {len(recs)} records in {time.time()-t2:.1f}s", flush=True)
             except Exception as exc:
                 errors.append(f"auxiliary source failed ({source.url}): {exc}")
+                print(f"  auxiliary[{si}] FAILED in {time.time()-t2:.1f}s: {exc}", flush=True)
 
         merged_records = merge_records(primary_records, auxiliary_records, existing_records)
         final_records.extend(merged_records)
+        print(f"  merged: {len(merged_records)} records", flush=True)
         report_sections.append({
             "conf_year": conf.conf_year,
             "status": "active" if not errors else "active_with_errors",
@@ -137,6 +154,7 @@ def main() -> int:
     # Preserve records from conf_years not selected in this run
     selected_conf_years = {c.conf_year for c in selected}
     preserved = [r for r in existing_records if r.conf_year not in selected_conf_years]
+    print(f"[build] preserving {len(preserved)} records from {len(set(r.conf_year for r in preserved))} unselected conf-years", flush=True)
     final_records = merge_records(final_records + preserved, [], existing_records)
 
     # Add preserved conf_years to report so it reflects the full CSV
