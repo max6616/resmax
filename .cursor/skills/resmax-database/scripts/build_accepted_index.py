@@ -14,6 +14,7 @@ from accepted_index_builder.fetchers import (
     fetch_aaai_ojs_all_issues,
     fetch_acmmm_vue_accepted_chunk,
     fetch_json,
+    fetch_openalex_works,
     fetch_openreview_api_v2,
     fetch_text,
 )
@@ -51,6 +52,11 @@ def should_include(conf: ConferenceYearConfig, venues: set[str], years: set[str]
 
 
 def fetch_and_parse(source: SourceConfig, conf: ConferenceYearConfig, fixtures_dir: Path) -> list[AcceptedPaperRecord]:
+    if source.kind == "openalex_api":
+        source_id = source.url
+        year = int(source.parser_args) if source.parser_args else conf.year
+        works = fetch_openalex_works(source_id, year)
+        return parse_payload(works, conf, source)
     if source.kind == "openreview_api_v2":
         group = source.url
         prefixes = [p.strip() for p in (source.parser_args or "").split(",") if p.strip()]

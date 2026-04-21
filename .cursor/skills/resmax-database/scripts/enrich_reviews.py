@@ -76,6 +76,7 @@ VENUE_REVIEW_CONFIG: dict[str, dict] = {
 VENUES_NO_REVIEWS = {
     "CVPR", "ECCV", "ICCV", "AAAI", "KDD",
     "SIGGRAPH", "SIGGRAPH_Asia", "ACMMM",
+    "TPAMI", "IJCV", "JMLR", "AIJ", "TNNLS",
 }
 
 

@@ -5,15 +5,21 @@ Layer 3 strategy — guaranteed coverage for papers that Layer 2 (batch APIs) mi
 Processes only rows that still lack abstracts after enrich_abstracts.py.
 
 Fallback chain per paper (stops at first success):
-  1. CVF OpenAccess page scrape (CVPR/ICCV — 100% reliable)
-  2. AAAI OJS page scrape (AAAI — 100% reliable)
-  3. ACM DL page scrape (KDD etc. with DOI)
-  4. OpenAlex title search → S2 DOI bridge if no abstract
-  5. CrossRef title search → S2 DOI bridge if no abstract
-  6. S2 title search
-  7. arXiv title search
-  8. Google search via SerpAPI (final fallback for uncovered papers)
-  9. Direct Google Scholar HTML scrape (free, no API key needed)
+  Conference path:
+    1. CVF OpenAccess page scrape (CVPR/ICCV — 100% reliable)
+    2. AAAI OJS page scrape (AAAI — 100% reliable)
+    3. ACM DL page scrape (KDD etc. with DOI)
+  Journal fast path (auto-routed by venue):
+    J1. JMLR abs page scrape (JMLR — 100% reliable, ~20/s)
+    J2. CrossRef DOI lookup (IEEE/Elsevier journals with DOI)
+    J3. S2 DOI lookup (bridge for journals with DOI)
+  Generic path (all venues):
+    4. OpenAlex title search → S2 DOI bridge if no abstract
+    5. CrossRef title search → S2 DOI bridge if no abstract
+    6. S2 title search
+    7. arXiv title search
+    8. Google search via SerpAPI (final fallback, budget-limited)
+    9. Direct Google Scholar HTML scrape (free, no API key needed)
 
 Usage:
   python3 enrich_abstracts_fallback.py --csv paper_database/accepted_index.csv
@@ -24,6 +30,7 @@ from __future__ import annotations
 
 import asyncio
 import csv
+import html as html_module
 import json
 import re
 import shutil
@@ -519,24 +526,113 @@ async def _search_google_scholar_direct(
     return result if result.get("abstract") or result.get("arxiv_id") or result.get("doi") else None
 
 
+# ---------------------------------------------------------------------------
+# Journal fast-path sources
+# ---------------------------------------------------------------------------
+
+JOURNAL_VENUES = frozenset({"TPAMI", "IJCV", "JMLR", "AIJ", "TNNLS"})
+OPENALEX_SKIP_VENUES = frozenset({"IJCV", "JMLR"})
+
+
+async def _fetch_jmlr_abstract(
+    session: aiohttp.ClientSession, paper_link: str,
+) -> Optional[str]:
+    """Fetch abstract from JMLR abs page derived from the PDF link.
+
+    PDF:  https://jmlr.org/papers/volume25/23-078/23-078.pdf
+    Abs:  https://jmlr.org/papers/v25/23-078.html
+    """
+    m = re.match(r"https?://jmlr\.org/papers/volume(\d+)/([^/]+)/", paper_link)
+    if not m:
+        return None
+    vol, paper_id = m.group(1), m.group(2)
+    abs_url = f"https://jmlr.org/papers/v{vol}/{paper_id}.html"
+    try:
+        async with session.get(abs_url, timeout=aiohttp.ClientTimeout(total=15)) as resp:
+            if resp.status != 200:
+                return None
+            html = await resp.text()
+        am = re.search(r'<p\s+class="abstract">\s*(.*?)\s*</p>', html, re.S)
+        if am:
+            text = re.sub(r"<[^>]+>", " ", am.group(1))
+            text = re.sub(r"\s+", " ", text).strip()
+            if len(text) > 30:
+                return text
+    except Exception:
+        pass
+    return None
+
+
+async def _fetch_springer_abstract(
+    session: aiohttp.ClientSession, doi: str,
+) -> Optional[str]:
+    """Fetch abstract from Springer article page via dc.description meta tag."""
+    url = f"https://link.springer.com/article/{doi}"
+    try:
+        async with session.get(
+            url,
+            timeout=aiohttp.ClientTimeout(total=20),
+            headers={
+                "User-Agent": (
+                    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+                    "AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36"
+                ),
+                "Accept": "text/html",
+            },
+        ) as resp:
+            if resp.status != 200:
+                return None
+            html = await resp.text()
+        m = re.search(
+            r'<meta\s+name="dc\.description"\s+content="([^"]+)"', html, re.I
+        )
+        if m:
+            text = re.sub(r"\s+", " ", html_module.unescape(m.group(1))).strip()
+            if len(text) > 30:
+                return text
+    except Exception:
+        pass
+    return None
+
+
+async def _fetch_crossref_abstract_by_doi(
+    session: aiohttp.ClientSession, doi: str,
+) -> Optional[str]:
+    """Fetch abstract directly from CrossRef by DOI (no title search needed)."""
+    url = f"https://api.crossref.org/works/{urllib.parse.quote(doi, safe='')}"
+    try:
+        async with session.get(
+            url,
+            headers={"Accept": "application/json"},
+            timeout=aiohttp.ClientTimeout(total=15),
+        ) as resp:
+            if resp.status != 200:
+                return None
+            data = await resp.json(content_type=None)
+        abstract = data.get("message", {}).get("abstract", "")
+        if abstract:
+            text = re.sub(r"<[^>]+>", " ", abstract)
+            text = re.sub(r"\s+", " ", text).strip()
+            if len(text) > 30:
+                return text
+    except Exception:
+        pass
+    return None
+
+
 async def _enrich_one(
     session: aiohttp.ClientSession,
     row: dict,
     semaphores: dict[str, asyncio.Semaphore],
     dry_run: bool,
     serpapi_key: str = "",
+    serpapi_budget: Optional[list] = None,
 ) -> str:
     """Try all fallback sources for one paper. Returns source name or empty.
 
-    Priority order (fastest/most-reliable first):
-      1. CVF OpenAccess page (CVPR/ICCV — 100% reliable, ~30/s)
-      2. AAAI OJS page (AAAI — 100% reliable, ~10/s)
-      3. ACM DL page (KDD etc. with DOI — reliable, ~10/s)
-      4. OpenAlex title search → S2 DOI bridge if no abstract
-      5. CrossRef title search → S2 DOI bridge if no abstract
-      6. S2 title search
-      7. arXiv title search
-      8. Google search via SerpAPI (final fallback)
+    Auto-routes journal papers through a fast path before the generic chain.
+    serpapi_budget is a mutable single-element list [remaining_count] for
+    global budget tracking across concurrent tasks.
     """
     title = row.get("title", "").strip()
     venue = row.get("venue", "").upper()
@@ -583,9 +679,55 @@ async def _enrich_one(
                 return "acm_page"
             await asyncio.sleep(0.2)
 
+    # ---- Journal fast path (auto-routed by venue) ----
+    if venue in JOURNAL_VENUES:
+        # J1: JMLR — scrape official abs page (~20/s, 100% reliable)
+        if venue == "JMLR" and "jmlr.org" in paper_link:
+            async with semaphores["jmlr"]:
+                abstract = await _fetch_jmlr_abstract(session, paper_link)
+                if abstract:
+                    if not dry_run:
+                        row["abstract_raw"] = abstract
+                    return "jmlr_abs_page"
+                await asyncio.sleep(0.05)
+
+        # J1b: Springer page scrape (IJCV — dc.description meta tag)
+        j_doi = row.get("doi", "").strip()
+        if venue == "IJCV" and j_doi and j_doi.startswith("10.1007/"):
+            async with semaphores["springer"]:
+                abstract = await _fetch_springer_abstract(session, j_doi)
+                if abstract:
+                    if not dry_run:
+                        row["abstract_raw"] = abstract
+                    return "springer_page"
+                await asyncio.sleep(0.5)
+
+        # J2: CrossRef DOI lookup (IEEE/Elsevier journals — fast, ~10/s)
+        if not j_doi:
+            j_doi = row.get("doi", "").strip()
+        if j_doi and venue not in ("JMLR", "IJCV"):
+            async with semaphores["crossref"]:
+                abstract = await _fetch_crossref_abstract_by_doi(session, j_doi)
+                if abstract:
+                    if not dry_run:
+                        row["abstract_raw"] = abstract
+                    return "crossref_doi_direct"
+                await asyncio.sleep(0.1)
+
+            # J3: S2 DOI lookup (bridge)
+            async with semaphores["s2"]:
+                result = await _s2_doi_lookup(session, j_doi)
+                if result and result.get("abstract"):
+                    if not dry_run:
+                        row["abstract_raw"] = result["abstract"]
+                    _apply_arxiv(result.get("arxiv_id", ""))
+                    return "s2_doi_direct"
+                await asyncio.sleep(0.2)
+
     # Source 4: OpenAlex title search → S2 DOI bridge
+    # Skip for venues where OpenAlex is known to lack abstracts
     discovered_doi = ""
-    if title:
+    if title and venue not in OPENALEX_SKIP_VENUES:
         async with semaphores["openalex"]:
             result = await _search_openalex(session, title)
             if result and result.get("abstract"):
@@ -654,8 +796,10 @@ async def _enrich_one(
                 return "arxiv_search"
             await asyncio.sleep(3.0)
 
-    # Source 8: Google search via SerpAPI (final fallback)
-    if title and serpapi_key:
+    # Source 8: Google search via SerpAPI (final fallback, budget-limited)
+    if title and serpapi_key and (serpapi_budget is None or serpapi_budget[0] > 0):
+        if serpapi_budget is not None:
+            serpapi_budget[0] -= 1
         async with semaphores["google"]:
             result = await _search_google_abstract(session, title, serpapi_key)
             if result:
@@ -717,7 +861,8 @@ async def _enrich_one(
 
 async def run_enrichment(rows: list[dict], targets: list[int],
                          concurrency: int, dry_run: bool,
-                         serpapi_key: str = "") -> dict[str, int]:
+                         serpapi_key: str = "",
+                         serpapi_budget_limit: int = 0) -> dict[str, int]:
     """Run async enrichment on target rows. Returns source -> count mapping."""
     semaphores = {
         "cvf": asyncio.Semaphore(concurrency),
@@ -728,7 +873,14 @@ async def run_enrichment(rows: list[dict], targets: list[int],
         "s2": asyncio.Semaphore(2),
         "arxiv": asyncio.Semaphore(1),
         "google": asyncio.Semaphore(3),
+        "jmlr": asyncio.Semaphore(min(concurrency, 20)),
+        "springer": asyncio.Semaphore(min(concurrency, 5)),
     }
+
+    serpapi_budget: Optional[list] = None
+    if serpapi_budget_limit > 0:
+        serpapi_budget = [serpapi_budget_limit]
+        print(f"[fallback] SerpAPI budget: {serpapi_budget_limit} searches", flush=True)
 
     source_counts: dict[str, int] = {}
     completed = 0
@@ -744,6 +896,7 @@ async def run_enrichment(rows: list[dict], targets: list[int],
             nonlocal completed
             source = await _enrich_one(
                 session, rows[idx], semaphores, dry_run, serpapi_key,
+                serpapi_budget=serpapi_budget,
             )
             completed += 1
             if source:
@@ -755,9 +908,12 @@ async def run_enrichment(rows: list[dict], targets: list[int],
                 rate = completed / elapsed if elapsed > 0 else 0
                 enriched_so_far = sum(source_counts.values())
                 eta = (total - completed) / rate if rate > 0 else 0
+                budget_str = ""
+                if serpapi_budget is not None:
+                    budget_str = f" serpapi_left={serpapi_budget[0]}"
                 print(f"  [{completed}/{total}] enriched={enriched_so_far} "
                       f"rate={rate:.1f}/s ETA={eta:.0f}s "
-                      f"sources={dict(source_counts)}",
+                      f"sources={dict(source_counts)}{budget_str}",
                       flush=True)
 
         tasks = [_process(idx) for idx in targets]
@@ -775,6 +931,8 @@ def main():
     p.add_argument("--concurrency", type=int, default=10)
     p.add_argument("--serpapi-key", default="",
                    help="SerpAPI key for Google search fallback (or set SERPAPI_KEY env var)")
+    p.add_argument("--serpapi-budget", type=int, default=0,
+                   help="Max SerpAPI searches (0 = unlimited). Protects limited quotas.")
     p.add_argument("--dry-run", action="store_true")
     args = p.parse_args()
 
@@ -817,7 +975,8 @@ def main():
 
     print(f"\n[fallback] starting with concurrency={args.concurrency}...", flush=True)
     source_counts = asyncio.run(
-        run_enrichment(rows, targets, args.concurrency, args.dry_run, serpapi_key)
+        run_enrichment(rows, targets, args.concurrency, args.dry_run, serpapi_key,
+                       serpapi_budget_limit=args.serpapi_budget)
     )
 
     total_enriched = sum(source_counts.values())

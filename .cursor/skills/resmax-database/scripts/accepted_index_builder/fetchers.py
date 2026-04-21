@@ -199,3 +199,66 @@ def fetch_acmmm_vue_accepted_chunk(base_url: str, chunk_name: str, timeout: int 
     chunk_path = f"/js/{chunk_name}.{hm.group(1)}.js"
     print(f"  [acmmm-vue] fetching {base}{chunk_path}")
     return _http_get(base + chunk_path, timeout=timeout)
+
+
+def fetch_openalex_works(
+    source_id: str,
+    year: int,
+    api_key: str | None = None,
+    per_page: int = 200,
+    timeout: int = 30,
+) -> list[dict]:
+    """Fetch all works from an OpenAlex source for a given year via cursor paging."""
+    import os
+
+    if api_key is None:
+        api_key = os.environ.get("OPENALEX_API_KEY", "")
+
+    base = "https://api.openalex.org/works"
+    select_fields = (
+        "id,title,doi,publication_date,authorships,"
+        "abstract_inverted_index,biblio,type,cited_by_count"
+    )
+    all_works: list[dict] = []
+    cursor = "*"
+    page_num = 0
+
+    while cursor:
+        params: dict[str, str] = {
+            "filter": f"primary_location.source.id:{source_id},publication_year:{year}",
+            "per_page": str(per_page),
+            "cursor": cursor,
+            "select": select_fields,
+        }
+        if api_key:
+            params["api_key"] = api_key
+
+        url = f"{base}?{urllib.parse.urlencode(params)}"
+        raw = _fetch_with_total_timeout(
+            url,
+            headers={
+                "User-Agent": "resmax-accepted-index/1.0",
+                "Accept": "application/json",
+            },
+            socket_timeout=timeout,
+            total_timeout=max(timeout * 3, 120),
+        )
+        data = json.loads(raw.decode("utf-8", errors="replace"))
+
+        results = data.get("results", [])
+        meta = data.get("meta", {})
+        all_works.extend(results)
+        page_num += 1
+
+        total = meta.get("count", "?")
+        if page_num == 1:
+            print(f"  [OpenAlex] source={source_id}, year={year}, total={total}")
+
+        next_cursor = meta.get("next_cursor")
+        if not next_cursor or not results:
+            break
+        cursor = next_cursor
+        time.sleep(0.2)
+
+    print(f"  [OpenAlex] fetched {len(all_works)} works in {page_num} pages")
+    return all_works

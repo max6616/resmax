@@ -375,6 +375,243 @@
       },
       "auxiliary_sources": [],
       "notes": "Official accepted regular papers page. title/authors only. No abstract."
+    },
+    {
+      "venue": "TPAMI",
+      "year": 2024,
+      "conf_year": "TPAMI_2024",
+      "status": "active",
+      "skip_reason": "",
+      "primary_source": {
+        "kind": "openalex_api",
+        "url": "S199944782",
+        "parser": "openalex_works",
+        "expected_count": 676,
+        "parser_args": "2024"
+      },
+      "auxiliary_sources": [],
+      "notes": "OpenAlex API. ISSN=0162-8828. IEEE TPAMI."
+    },
+    {
+      "venue": "TPAMI",
+      "year": 2025,
+      "conf_year": "TPAMI_2025",
+      "status": "active",
+      "skip_reason": "",
+      "primary_source": {
+        "kind": "openalex_api",
+        "url": "S199944782",
+        "parser": "openalex_works",
+        "expected_count": 700,
+        "parser_args": "2025"
+      },
+      "auxiliary_sources": [],
+      "notes": "OpenAlex API. ISSN=0162-8828. IEEE TPAMI."
+    },
+    {
+      "venue": "TPAMI",
+      "year": 2026,
+      "conf_year": "TPAMI_2026",
+      "status": "active",
+      "skip_reason": "",
+      "primary_source": {
+        "kind": "openalex_api",
+        "url": "S199944782",
+        "parser": "openalex_works",
+        "expected_count": null,
+        "parser_args": "2026"
+      },
+      "auxiliary_sources": [],
+      "notes": "OpenAlex API. ISSN=0162-8828. IEEE TPAMI. 2026 partial year."
+    },
+    {
+      "venue": "IJCV",
+      "year": 2024,
+      "conf_year": "IJCV_2024",
+      "status": "active",
+      "skip_reason": "",
+      "primary_source": {
+        "kind": "openalex_api",
+        "url": "S25538012",
+        "parser": "openalex_works",
+        "expected_count": 356,
+        "parser_args": "2024"
+      },
+      "auxiliary_sources": [],
+      "notes": "OpenAlex API. ISSN=0920-5691. Springer IJCV. No abstract from OpenAlex; use fallback."
+    },
+    {
+      "venue": "IJCV",
+      "year": 2025,
+      "conf_year": "IJCV_2025",
+      "status": "active",
+      "skip_reason": "",
+      "primary_source": {
+        "kind": "openalex_api",
+        "url": "S25538012",
+        "parser": "openalex_works",
+        "expected_count": 360,
+        "parser_args": "2025"
+      },
+      "auxiliary_sources": [],
+      "notes": "OpenAlex API. ISSN=0920-5691. Springer IJCV. No abstract from OpenAlex; use fallback."
+    },
+    {
+      "venue": "IJCV",
+      "year": 2026,
+      "conf_year": "IJCV_2026",
+      "status": "active",
+      "skip_reason": "",
+      "primary_source": {
+        "kind": "openalex_api",
+        "url": "S25538012",
+        "parser": "openalex_works",
+        "expected_count": null,
+        "parser_args": "2026"
+      },
+      "auxiliary_sources": [],
+      "notes": "OpenAlex API. ISSN=0920-5691. Springer IJCV. 2026 partial year."
+    },
+    {
+      "venue": "JMLR",
+      "year": 2024,
+      "conf_year": "JMLR_2024",
+      "status": "active",
+      "skip_reason": "",
+      "primary_source": {
+        "kind": "jmlr_html",
+        "url": "https://jmlr.org/papers/v25/",
+        "parser": "jmlr_html",
+        "expected_count": 350
+      },
+      "auxiliary_sources": [],
+      "notes": "JMLR official site. Volume 25 = 2024."
+    },
+    {
+      "venue": "JMLR",
+      "year": 2025,
+      "conf_year": "JMLR_2025",
+      "status": "active",
+      "skip_reason": "",
+      "primary_source": {
+        "kind": "jmlr_html",
+        "url": "https://jmlr.org/papers/v26/",
+        "parser": "jmlr_html",
+        "expected_count": 300
+      },
+      "auxiliary_sources": [],
+      "notes": "JMLR official site. Volume 26 = 2025."
+    },
+    {
+      "venue": "JMLR",
+      "year": 2026,
+      "conf_year": "JMLR_2026",
+      "status": "active",
+      "skip_reason": "",
+      "primary_source": {
+        "kind": "jmlr_html",
+        "url": "https://jmlr.org/papers/v27/",
+        "parser": "jmlr_html",
+        "expected_count": null
+      },
+      "auxiliary_sources": [],
+      "notes": "JMLR official site. Volume 27 = 2026. Partial year."
+    },
+    {
+      "venue": "AIJ",
+      "year": 2024,
+      "conf_year": "AIJ_2024",
+      "status": "active",
+      "skip_reason": "",
+      "primary_source": {
+        "kind": "openalex_api",
+        "url": "S196139623",
+        "parser": "openalex_works",
+        "expected_count": 132,
+        "parser_args": "2024"
+      },
+      "auxiliary_sources": [],
+      "notes": "OpenAlex API. ISSN=0004-3702. Elsevier Artificial Intelligence."
+    },
+    {
+      "venue": "AIJ",
+      "year": 2025,
+      "conf_year": "AIJ_2025",
+      "status": "active",
+      "skip_reason": "",
+      "primary_source": {
+        "kind": "openalex_api",
+        "url": "S196139623",
+        "parser": "openalex_works",
+        "expected_count": 130,
+        "parser_args": "2025"
+      },
+      "auxiliary_sources": [],
+      "notes": "OpenAlex API. ISSN=0004-3702. Elsevier Artificial Intelligence."
+    },
+    {
+      "venue": "AIJ",
+      "year": 2026,
+      "conf_year": "AIJ_2026",
+      "status": "active",
+      "skip_reason": "",
+      "primary_source": {
+        "kind": "openalex_api",
+        "url": "S196139623",
+        "parser": "openalex_works",
+        "expected_count": null,
+        "parser_args": "2026"
+      },
+      "auxiliary_sources": [],
+      "notes": "OpenAlex API. ISSN=0004-3702. Elsevier Artificial Intelligence. 2026 partial year."
+    },
+    {
+      "venue": "TNNLS",
+      "year": 2024,
+      "conf_year": "TNNLS_2024",
+      "status": "active",
+      "skip_reason": "",
+      "primary_source": {
+        "kind": "openalex_api",
+        "url": "S4210175523",
+        "parser": "openalex_works",
+        "expected_count": 842,
+        "parser_args": "2024"
+      },
+      "auxiliary_sources": [],
+      "notes": "OpenAlex API. ISSN=2162-237X. IEEE TNNLS."
+    },
+    {
+      "venue": "TNNLS",
+      "year": 2025,
+      "conf_year": "TNNLS_2025",
+      "status": "active",
+      "skip_reason": "",
+      "primary_source": {
+        "kind": "openalex_api",
+        "url": "S4210175523",
+        "parser": "openalex_works",
+        "expected_count": 850,
+        "parser_args": "2025"
+      },
+      "auxiliary_sources": [],
+      "notes": "OpenAlex API. ISSN=2162-237X. IEEE TNNLS."
+    },
+    {
+      "venue": "TNNLS",
+      "year": 2026,
+      "conf_year": "TNNLS_2026",
+      "status": "active",
+      "skip_reason": "",
+      "primary_source": {
+        "kind": "openalex_api",
+        "url": "S4210175523",
+        "parser": "openalex_works",
+        "expected_count": null,
+        "parser_args": "2026"
+      },
+      "auxiliary_sources": [],
+      "notes": "OpenAlex API. ISSN=2162-237X. IEEE TNNLS. 2026 partial year."
     }
   ]
 }

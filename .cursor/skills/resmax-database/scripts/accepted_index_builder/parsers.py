@@ -936,6 +936,138 @@ def parse_acmmm_vue_accepted(js_text: str, conf: ConferenceYearConfig, source: S
     return records
 
 
+JOURNAL_VENUES = {"TPAMI", "IJCV", "JMLR", "AIJ", "TNNLS"}
+
+_NON_PAPER_RE = re.compile(
+    r"(?:^|\b)(?:editorial\b|guest editorial|reviewers? list|editorial board$"
+    r"|editor.s note|corrigendum\b|erratum\b|retraction\b"
+    r"|table of contents|front cover|back cover)"
+    r"|^correction to[:\s]",
+    re.I,
+)
+
+
+def _is_non_paper(title: str) -> bool:
+    """Return True if title matches known non-paper patterns (editorials, etc.)."""
+    clean = re.sub(r"<[^>]+>", "", title).strip()
+    return bool(_NON_PAPER_RE.search(clean))
+
+
+def _reconstruct_abstract(inverted_index: dict | None) -> str:
+    if not inverted_index:
+        return ""
+    word_positions: list[tuple[int, str]] = []
+    for word, positions in inverted_index.items():
+        for pos in positions:
+            word_positions.append((pos, word))
+    word_positions.sort()
+    return " ".join(w for _, w in word_positions)
+
+
+def parse_openalex_works(payload: list, conf: ConferenceYearConfig, source: SourceConfig) -> list[AcceptedPaperRecord]:
+    records: list[AcceptedPaperRecord] = []
+    for work in payload:
+        title = normalize_whitespace(str(work.get("title", "") or ""))
+        if not title:
+            continue
+        if _is_non_paper(title):
+            continue
+
+        authorships = work.get("authorships", []) or []
+        author_names = []
+        for a in authorships:
+            author_info = a.get("author", {}) or {}
+            name = (author_info.get("display_name", "") or "").strip()
+            if name:
+                author_names.append(name)
+        authors_text = "; ".join(author_names)
+
+        doi_raw = (work.get("doi") or "").strip()
+        doi = doi_raw.replace("https://doi.org/", "") if doi_raw else ""
+
+        abstract = normalize_whitespace(
+            _reconstruct_abstract(work.get("abstract_inverted_index"))
+        )
+
+        biblio = work.get("biblio", {}) or {}
+
+        records.append(
+            AcceptedPaperRecord(
+                venue=conf.venue,
+                year=conf.year,
+                conf_year=conf.conf_year,
+                title=title,
+                authors=authors_text,
+                source_type=source.kind,
+                source_url=f"openalex:{source.url}",
+                paper_link=doi_raw or "",
+                doi=doi,
+                abstract_raw=abstract,
+                decision="Accept",
+                acceptance_type="Journal Article",
+            )
+        )
+    print(f"  [openalex] parsed {len(records)} papers from {conf.conf_year}")
+    return records
+
+
+def parse_jmlr_html(text: str, conf: ConferenceYearConfig, source: SourceConfig) -> list[AcceptedPaperRecord]:
+    """Parse JMLR volume page HTML.
+
+    Each paper is a <dl> block:
+      <dl>
+      <dt>Title</dt>
+      <dd><b><i>Author1, Author2</i></b>; (N):pages, year.
+      <br>[<a href='abs_url'>abs</a>][<a href='pdf_url'>pdf</a>]...
+      </dl>
+    """
+    block_re = re.compile(r"<dl>\s*<dt>(.*?)</dt>\s*<dd>(.*?)</dl>", re.S)
+    author_re = re.compile(r"<b><i>(.*?)</i></b>", re.S)
+    abs_re = re.compile(r"""href=["'](/papers/v\d+/[^"']+\.html)["'][^>]*>abs</a>""", re.I)
+    pdf_re = re.compile(r"""href=["'](/papers/volume\d+/[^"']+\.pdf)["'][^>]*>pdf</a>""", re.I)
+    code_re = re.compile(r"""href=["'](https?://[^"']+)["'][^>]*>code</a>""", re.I)
+
+    records: list[AcceptedPaperRecord] = []
+    for dt_raw, dd_raw in block_re.findall(text):
+        title = normalize_whitespace(html.unescape(re.sub(r"<[^>]+>", " ", dt_raw)))
+        if not title:
+            continue
+        if _is_non_paper(title):
+            continue
+
+        am = author_re.search(dd_raw)
+        authors_raw = am.group(1) if am else ""
+        authors_clean = normalize_whitespace(html.unescape(re.sub(r"<[^>]+>", "", authors_raw)))
+        authors_text = "; ".join(a.strip() for a in authors_clean.split(",") if a.strip())
+
+        abs_m = abs_re.search(dd_raw)
+        abs_url = f"https://jmlr.org{abs_m.group(1)}" if abs_m else ""
+
+        pdf_m = pdf_re.search(dd_raw)
+        pdf_url = f"https://jmlr.org{pdf_m.group(1)}" if pdf_m else ""
+
+        code_m = code_re.search(dd_raw)
+        code_url = code_m.group(1) if code_m else ""
+
+        records.append(
+            AcceptedPaperRecord(
+                venue=conf.venue,
+                year=conf.year,
+                conf_year=conf.conf_year,
+                title=title,
+                authors=authors_text,
+                source_type=source.kind,
+                source_url=source.url,
+                paper_link=pdf_url or abs_url,
+                code_url=code_url,
+                decision="Accept",
+                acceptance_type="Journal Article",
+            )
+        )
+    print(f"  [jmlr] parsed {len(records)} papers from {conf.conf_year}")
+    return records
+
+
 def parse_acmmm_html(text: str, conf: ConferenceYearConfig, source: SourceConfig) -> list[AcceptedPaperRecord]:
     """Parse ACM MM accepted papers HTML: <p>ID\xa0<b>Title</b><br/>Authors</p>"""
     records: list[AcceptedPaperRecord] = []
@@ -982,6 +1114,8 @@ PARSERS: dict[str, Callable[[object, ConferenceYearConfig, SourceConfig], list[A
     "kesen_siggraph_html": lambda payload, conf, source: parse_kesen_siggraph_html(str(payload), conf, source),
     "acmmm_html": lambda payload, conf, source: parse_acmmm_html(str(payload), conf, source),
     "acmmm_vue_accepted": lambda payload, conf, source: parse_acmmm_vue_accepted(str(payload), conf, source),
+    "openalex_works": parse_openalex_works,
+    "jmlr_html": lambda payload, conf, source: parse_jmlr_html(str(payload), conf, source),
 }
 
 

@@ -1,6 +1,6 @@
 ---
 name: resmax-database
-description: 构建和维护 AI 顶会基础文献库。包括数据源调研、accepted list 抓取、元信息批量补全，均支持增量更新。输出 paper_database/accepted_index.csv。
+description: 构建和维护 AI 顶会/顶刊基础文献库。包括数据源调研、accepted list 抓取（会议）/ 论文列表抓取（期刊）、元信息批量补全，均支持增量更新。输出 paper_database/accepted_index.csv。
 ---
 
 # resmax-database
@@ -39,7 +39,7 @@ SKILL_ROOT=.cursor/skills/resmax-database
 
 ## 触发词
 
-"建文献库", "build literature base", "更新accepted", "刷新索引", "补摘要", "增量更新文献库", "全量重建"
+"建文献库", "build literature base", "更新accepted", "刷新索引", "补摘要", "增量更新文献库", "全量重建", "期刊入库", "journal papers", "更新期刊"
 
 ## 执行模式
 
@@ -489,12 +489,46 @@ python3 $SKILL_ROOT/scripts/enrich_reviews.py \
 7. 如果调研报告显示该 venue 评审数据可获取，运行 `enrich_reviews.py --filter <CONF_YEAR>` 补全评审信息（见子能力 3）
 8. 使用 `resmax-embedding` skill 在 GPU 服务器上增量更新 embedding 缓存
 
+## 新增期刊流程
+
+期刊论文入库与会议类似，但数据源不同。当前支持两种期刊数据源：
+
+### OpenAlex API（TPAMI、IJCV、AIJ、TNNLS）
+
+1. 在 `config/journal_sources.json` 中确认期刊的 OpenAlex source ID
+2. 在 `config/source_registry.json` 中添加条目，`kind` 设为 `openalex_api`，`url` 填 OpenAlex source ID，`parser_args` 填年份
+3. 设置环境变量 `OPENALEX_API_KEY`（免费注册获取，无 key 时每天仅 100 次请求）
+4. 运行 `build_accepted_index.py --conf-years <VENUE_YEAR>` 增量抓取
+5. OpenAlex 对 IEEE 和 Elsevier 期刊直接提供摘要；Springer 期刊（如 IJCV）无摘要，需走 enrich fallback 补全
+6. 期刊不公开评审数据，运行 `enrich_reviews.py --mark-unavailable --filter <VENUE_YEAR>` 标记
+
+### JMLR 官网（JMLR）
+
+1. 在 `config/source_registry.json` 中添加条目，`kind` 设为 `jmlr_html`，`url` 填 `https://jmlr.org/papers/v{N}/`
+2. Volume-年份映射：v25=2024, v26=2025, v27=2026
+3. 运行 `build_accepted_index.py --conf-years JMLR_<YEAR>` 增量抓取
+4. JMLR 是开放获取，摘要通过 fallback 脚本从 abs 页面补全
+
+### 期刊 acceptance_type
+
+期刊论文的 `acceptance_type` 统一设为 `Journal Article`，区别于会议的 Oral/Spotlight/Highlight/Poster。
+
+### 当前已入库期刊
+
+| 期刊 | OpenAlex ID | 数据源 | 年份 | 约论文数/年 |
+|------|-------------|--------|------|------------|
+| TPAMI | S199944782 | openalex_api | 2024-2026 | ~700 |
+| IJCV | S25538012 | openalex_api | 2024-2026 | ~360 |
+| JMLR | — | jmlr_html | 2024-2026 | ~300 |
+| AIJ | S196139623 | openalex_api | 2024-2026 | ~130 |
+| TNNLS | S4210175523 | openalex_api | 2024-2026 | ~850 |
+
 ## 配置文件说明
 
 ### config/source_registry.json
 
-数据源注册表，定义每个 conference-year 的抓取源。每个条目包含：
-- `venue` / `year` / `conf_year`：会议标识
+数据源注册表，定义每个 conference-year / journal-year 的抓取源。每个条目包含：
+- `venue` / `year` / `conf_year`：会议或期刊标识（期刊也使用 `conf_year` 字段，格式如 `TPAMI_2025`）
 - `status`：`active`（正常抓取）或 `skip`（跳过，需填 `skip_reason`）
 - `primary_source`：主数据源（`kind`、`url`、`parser`、`expected_count`）
 - `auxiliary_sources`：辅助数据源列表
@@ -503,6 +537,17 @@ python3 $SKILL_ROOT/scripts/enrich_reviews.py \
 `url` 支持两种格式：
 - 标准 URL：直接从网络抓取
 - `fixture://` 前缀：从 `fixtures/` 目录加载离线快照（用于无法直接抓取或需要稳定复现的源）
+
+### config/journal_sources.json
+
+期刊元信息参考表，记录每个期刊的 OpenAlex source ID、ISSN、DBLP key 等。供调研和新增期刊时查表使用，不被脚本直接读取（脚本通过 source_registry.json 获取配置）。
+
+### 环境变量
+
+| 变量 | 说明 | 必填 |
+|------|------|------|
+| `OPENALEX_API_KEY` | OpenAlex API key（免费注册获取） | 期刊入库时必填，否则每天仅 100 次请求 |
+| `SERPAPI_KEY` | SerpAPI key（摘要兜底搜索用） | 否 |
 
 ## 经验沉淀规则
 
@@ -575,3 +620,8 @@ virtual conference JSON 的 `decision` 字段大小写极不统一（如 `Accept
 - 数据源（OJS proceedings / accepted list HTML）不提供 oral/poster 区分
 - 这些会议也不公开 oral/poster 列表
 - 补全策略：统一标记为 `Poster`
+
+**E. 期刊（TPAMI、IJCV、JMLR、AIJ、TNNLS）**：
+- 期刊论文无 oral/poster 区分
+- Parser 直接设置 `acceptance_type = "Journal Article"`
+- 无需额外补全

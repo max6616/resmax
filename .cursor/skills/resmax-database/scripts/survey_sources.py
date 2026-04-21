@@ -73,7 +73,8 @@ REVIEW_POLICY: dict[str, dict] = {
     },
 }
 
-VENUES_NO_REVIEWS = {"CVPR", "ECCV", "ICCV", "AAAI", "KDD", "SIGGRAPH", "SIGGRAPH_ASIA", "ACMMM"}
+VENUES_NO_REVIEWS = {"CVPR", "ECCV", "ICCV", "AAAI", "KDD", "SIGGRAPH", "SIGGRAPH_ASIA", "ACMMM",
+                     "TPAMI", "IJCV", "JMLR", "AIJ", "TNNLS"}
 
 
 VENUE_DOMAINS: dict[str, dict] = {
