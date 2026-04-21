@@ -195,8 +195,8 @@ log.write(out_dir / 'filter_log.md')
 | `has_abstract` | bool | 是否有摘要 |
 | `has_pdf_link` | bool | 是否有 PDF 链接 |
 | `pdf_url` | string | PDF URL |
-| `openreview_rating_mean` | float | OpenReview 平均评分 |
-| `openreview_confidence_mean` | float | OpenReview 平均置信度 |
-| `openreview_decision` | string | OpenReview 决定 |
+| `openreview_rating_mean` | float | OpenReview 平均评分（从 `accepted_index.csv` 的 `review_score_mean` 字段读取，由 `resmax-database` 子能力 3 预填充） |
+| `openreview_confidence_mean` | float | OpenReview 平均置信度（从 `accepted_index.csv` 的 `review_confidence_mean` 字段读取） |
+| `openreview_decision` | string | OpenReview 决定（从 `accepted_index.csv` 的 `decision` 字段读取） |
 | `presentation_type` | string | 展示类型（oral / poster / spotlight） |
 | `citation_count` | int | 引用数 |

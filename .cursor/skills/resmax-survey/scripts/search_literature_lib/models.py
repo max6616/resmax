@@ -82,6 +82,9 @@ def load_accepted_index(path: Path) -> list[CandidatePaper]:
                 source_url=row.get("source_url", ""),
                 openreview_forum_id=row.get("openreview_forum_id", ""),
                 has_pdf_camera_ready=row.get("has_pdf_camera_ready", ""),
+                openreview_rating_mean=row.get("review_score_mean", ""),
+                openreview_confidence_mean=row.get("review_confidence_mean", ""),
+                openreview_decision=row.get("decision", ""),
             ))
     return records
 

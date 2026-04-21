@@ -16,6 +16,66 @@ from pathlib import Path
 from typing import Iterable
 
 
+OPENREVIEW_API = "https://api2.openreview.net"
+
+REVIEW_POLICY: dict[str, dict] = {
+    "ICLR": {
+        "reviews_public": True,
+        "platform": "openreview_v2",
+        "group_pattern": "ICLR.cc/{year}/Conference",
+        "review_invitation": "ICLR.cc/{year}/Conference/Submission{number}/-/Official_Review",
+        "default_score_scale": "1-10",
+        "default_num_reviewers": 4,
+        "notes": "All reviews public (accepted + rejected).",
+    },
+    "NEURIPS": {
+        "reviews_public": True,
+        "platform": "openreview_v2",
+        "group_pattern": "NeurIPS.cc/{year}/Conference",
+        "review_invitation": "NeurIPS.cc/{year}/Conference/Submission{number}/-/Official_Review",
+        "default_score_scale": "1-10",
+        "score_scale_overrides": {2025: "1-6"},
+        "default_num_reviewers": 4,
+        "notes": "Accepted paper reviews public. Score scale changed to 1-6 in 2025.",
+    },
+    "ICML": {
+        "reviews_public": True,
+        "platform": "openreview_v2",
+        "group_pattern": "ICML.cc/{year}/Conference",
+        "review_invitation": "ICML.cc/{year}/Conference/Submission{number}/-/Official_Review",
+        "default_score_scale": "1-10",
+        "default_num_reviewers": 4,
+        "notes": "Accepted paper reviews public. Rejected opt-in only.",
+    },
+    "ACL": {
+        "reviews_public": "partial",
+        "platform": "openreview_v2_arr",
+        "group_pattern": "aclweb.org/ACL/ARR/{year}/{month}",
+        "default_score_scale": "1-5",
+        "default_num_reviewers": 3,
+        "notes": "Via ACL Rolling Review. Delayed release; structured datasets from TU Darmstadt.",
+    },
+    "EMNLP": {
+        "reviews_public": "partial",
+        "platform": "openreview_v2_arr",
+        "group_pattern": "aclweb.org/ACL/ARR/{year}/{month}",
+        "default_score_scale": "1-5",
+        "default_num_reviewers": 3,
+        "notes": "Via ACL Rolling Review. Same policy as ACL.",
+    },
+    "NAACL": {
+        "reviews_public": "partial",
+        "platform": "openreview_v2_arr",
+        "group_pattern": "aclweb.org/ACL/ARR/{year}/{month}",
+        "default_score_scale": "1-5",
+        "default_num_reviewers": 3,
+        "notes": "Via ACL Rolling Review. Same policy as ACL.",
+    },
+}
+
+VENUES_NO_REVIEWS = {"CVPR", "ECCV", "ICCV", "AAAI", "KDD", "SIGGRAPH", "SIGGRAPH_ASIA", "ACMMM"}
+
+
 VENUE_DOMAINS: dict[str, dict] = {
     "ICLR": {
         "virtual_json_pattern": "https://iclr.cc/static/virtual/data/iclr-{year}-orals-posters.json",
@@ -84,12 +144,25 @@ class SourceCandidate:
 
 
 @dataclass
+class ReviewProbeInfo:
+    available: str = "unknown"  # "yes" | "no" | "partial" | "unknown"
+    platform: str = ""
+    score_scale: str = ""
+    num_reviewers: int = 0
+    api_group: str = ""
+    invitation_pattern: str = ""
+    sample_verified: bool = False
+    notes: str = ""
+
+
+@dataclass
 class SourceProbeResult:
     venue: str
     year: int
     candidates: list[SourceCandidate] = field(default_factory=list)
     github_repos: list[str] = field(default_factory=list)
     notes: list[str] = field(default_factory=list)
+    review_info: ReviewProbeInfo | None = None
 
 
 def _http_status(url: str, timeout: int = 10) -> int:
@@ -340,6 +413,74 @@ def probe_acmmm_official(venue: str, year: int, domain: dict) -> SourceCandidate
     )
 
 
+def probe_openreview_reviews(venue: str, year: int) -> ReviewProbeInfo:
+    venue_upper = venue.upper()
+    if venue_upper in VENUES_NO_REVIEWS:
+        return ReviewProbeInfo(
+            available="no",
+            notes=f"{venue_upper} does not publicly release reviews.",
+        )
+
+    policy = REVIEW_POLICY.get(venue_upper)
+    if not policy:
+        return ReviewProbeInfo(
+            available="unknown",
+            notes=f"No review policy data for {venue_upper}. Manual check needed.",
+        )
+
+    if not policy.get("reviews_public"):
+        return ReviewProbeInfo(available="no", notes=policy.get("notes", ""))
+
+    overrides = policy.get("score_scale_overrides", {})
+    score_scale = overrides.get(year, policy.get("default_score_scale", ""))
+    group = policy["group_pattern"].format(year=year, month="*")
+    avail = "yes" if policy["reviews_public"] is True else str(policy["reviews_public"])
+
+    info = ReviewProbeInfo(
+        available=avail,
+        platform=policy.get("platform", ""),
+        score_scale=score_scale,
+        num_reviewers=policy.get("default_num_reviewers", 0),
+        api_group=group,
+        invitation_pattern=policy.get("review_invitation", ""),
+        notes=policy.get("notes", ""),
+    )
+
+    if policy.get("platform") == "openreview_v2":
+        info = _verify_openreview_reviews(info, venue_upper, year, policy)
+
+    return info
+
+
+def _verify_openreview_reviews(
+    info: ReviewProbeInfo, venue: str, year: int, policy: dict,
+) -> ReviewProbeInfo:
+    group = policy["group_pattern"].format(year=year)
+    url = (
+        f"{OPENREVIEW_API}/notes?"
+        f"invitation={group}/-/Submission&limit=1&details=replies"
+    )
+    data = _http_get_json(url, timeout=20)
+    if not data or not data.get("notes"):
+        info.notes += " API probe: no submissions found or API error."
+        return info
+
+    sample = data["notes"][0]
+    forum_id = sample.get("id", "")
+    replies = sample.get("details", {}).get("replies", [])
+    review_count = sum(
+        1 for r in replies
+        if "Official_Review" in r.get("invitation", "")
+    )
+    if review_count > 0:
+        info.sample_verified = True
+        info.notes += f" API probe OK: sampled forum {forum_id}, found {review_count} reviews."
+    else:
+        info.notes += f" API probe: sampled forum {forum_id}, no reviews visible."
+
+    return info
+
+
 def probe_github(venue: str, year: int) -> list[str]:
     queries = [
         f"{venue}{year} accepted",
@@ -393,6 +534,17 @@ def probe_venue_year(venue: str, year: int) -> SourceProbeResult:
         best = max(available, key=lambda c: len(c.fields))
         result.notes.append(f"Recommended primary: {best.name} ({', '.join(best.fields)})")
 
+    result.review_info = probe_openreview_reviews(venue, year)
+    if result.review_info.available == "yes":
+        result.notes.append(
+            f"Reviews: publicly available via {result.review_info.platform} "
+            f"(scale {result.review_info.score_scale}, ~{result.review_info.num_reviewers} reviewers)"
+        )
+    elif result.review_info.available == "partial":
+        result.notes.append(f"Reviews: partially available — {result.review_info.notes}")
+    else:
+        result.notes.append("Reviews: not publicly available.")
+
     return result
 
 
@@ -427,6 +579,28 @@ def render_report(result: SourceProbeResult) -> str:
             lines.append(f"- {r}")
     else:
         lines.append("- No community datasets found.")
+    lines.append("")
+
+    ri = result.review_info
+    lines.append("## Review Data Availability")
+    lines.append("")
+    if ri:
+        lines.append(f"- **Available**: {ri.available}")
+        if ri.platform:
+            lines.append(f"- **Platform**: {ri.platform}")
+        if ri.score_scale:
+            lines.append(f"- **Score scale**: {ri.score_scale}")
+        if ri.num_reviewers:
+            lines.append(f"- **Typical reviewers/paper**: {ri.num_reviewers}")
+        if ri.api_group:
+            lines.append(f"- **API group**: `{ri.api_group}`")
+        if ri.invitation_pattern:
+            lines.append(f"- **Review invitation**: `{ri.invitation_pattern}`")
+        lines.append(f"- **Sample verified**: {ri.sample_verified}")
+        if ri.notes:
+            lines.append(f"- **Notes**: {ri.notes}")
+    else:
+        lines.append("- No review probe performed.")
     lines.append("")
 
     available = [c for c in result.candidates if c.status == 200]

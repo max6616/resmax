@@ -39,9 +39,31 @@ SKILL_ROOT=.cursor/skills/resmax-database
 
 ## 触发词
 
-"建文献库", "build literature base", "更新accepted", "刷新索引", "补摘要", "增量更新文献库"
+"建文献库", "build literature base", "更新accepted", "刷新索引", "补摘要", "增量更新文献库", "全量重建"
 
-## 三个子能力
+## 执行模式
+
+本 skill 有两种执行模式，主 agent 根据用户指令选择：
+
+### 增量更新（默认）
+
+仅处理用户指定的 conf_year，按子能力 1 → 2 → 3 顺序执行。适用于新增会议或补全特定会议的元信息。
+
+### 全量重建
+
+当用户说"全量重建"时，主 agent 必须端到端执行以下完整流程，不得在任何中间步骤停止：
+
+1. **子能力 1：抓取论文目录** — 运行 `build_accepted_index.py --force`（不带 `--conf-years` 过滤）
+2. **子能力 2-摘要补全** — 对每个缺摘要的 conf_year 依次执行第一轮（S2 batch）→ 第二轮（多源 fallback）→ 第三轮（web search 兜底），直到摘要覆盖率 100%
+3. **acceptance_type 补全** — 对每个 acceptance_type 为空或为无区分度 "Accept" 的 conf_year，按下文"录用等级映射规则"补全
+4. **子能力 3-评审补全** — 对公开评审的 venue 运行 `enrich_reviews.py`；对不公开的 venue 运行 `--mark-unavailable` 标记
+5. **最终验证** — 检查所有 conf_year 的摘要覆盖率 = 100%、acceptance_type 覆盖率 = 100% 且无 "Accept"、论文总数不低于重建前；公开评审 venue 的评审覆盖率应接近 openreview_forum_id 覆盖率
+
+全量重建时 `build_accepted_index.py` 会从零开始构建 CSV（`loaded 0 existing records` 是正常的，说明旧 CSV 不存在或已被用户重命名为备份）。这意味着旧 CSV 中通过 enrich 脚本补全的字段（abstract_raw、doi、arxiv_id 等）不会被自动保留，必须在子能力 1 完成后通过子能力 2 重新补全。
+
+**硬性约束**：全量重建不得在子能力 1 完成后就停止。子能力 1 产出的 CSV 只有论文目录骨架，缺少摘要和细粒度录用等级，不是可用的最终产物。
+
+## 四个子能力
 
 ### 0. 数据源调研（新增会议的前置步骤，subagent 执行）
 
@@ -91,16 +113,28 @@ you MUST use web search to find the accepted list yourself. Typical search queri
 Investigate the found pages: check HTTP status, inspect HTML structure, identify
 what fields are available (title, authors, abstract, PDF link).
 
+## Step 3.5: Evaluate review data availability
+
+The script now also probes OpenReview API for review data. Check the "Review Data
+Availability" section in each report. If the script shows "unknown" or you suspect
+the result is stale, verify manually:
+- Check if the venue uses OpenReview and whether reviews are visible
+- Note the scoring scale (e.g. 1-10, 1-6, 1-5) and typical reviewer count
+- For ACL/EMNLP/NAACL, check ARR data release status
+
 ## Step 4: For each venue-year, return a JSON object with:
 - venue, year
 - status: "available" | "not_yet_announced" | "no_source_found"
 - recommended_primary_source: {{name, url, fields[], has_abstract}}
 - recommended_auxiliary_sources: [{{name, url, purpose}}]
 - recommended_registry_entry: the full JSON entry for source_registry.json
+- review_info: {{available: "yes"|"no"|"partial", platform, score_scale,
+  num_reviewers, api_group, invitation_pattern, notes}}
 - notes: any important observations
 - playbook_update: new lessons learned about this venue series that would help
   future surveys (e.g. "site is Vue SPA, must parse webpack chunks",
-  "abstracts not on accepted list, use ACM DL DOI lookup"). Only include
+  "abstracts not on accepted list, use ACM DL DOI lookup",
+  "reviews public on OpenReview, scale 1-10"). Only include
   generalizable patterns, not year-specific details like chunk hashes.
 
 If the accepted list has not been announced yet, set status to "not_yet_announced"
@@ -126,6 +160,8 @@ response = Task(prompt=prompt, subagent_type="generalPurpose")
 调研报告中需重点关注：
 - 主数据源是否包含 `abstract` 字段
 - 是否有辅助源可补充摘要（如 OpenReview、arXiv）
+- 评审数据是否公开可获取（review_info.available）
+- 如果评审可获取，确认评分制度（score_scale）和 API 路径（api_group）
 
 ### 1. Accepted list 抓取
 
@@ -282,12 +318,112 @@ print(f'{has}/{len(rows)} ({has/len(rows)*100:.1f}%)')
 "
 ```
 
+### 3. 评审信息补全（仅公开评审的 venue）
+
+对公开评审数据的 venue（ICLR、NeurIPS、ICML、ACL/EMNLP），通过 OpenReview API v2 批量拉取评审信息，写入 CSV 和 JSON 详情文件。
+
+**前置条件**：目标 conf_year 的论文必须已有 `openreview_forum_id`。如果 forum_id 覆盖率不足，脚本会先尝试通过 OpenReview API 按 title 匹配补全。
+
+**硬性约束**：对调研阶段确认评审不公开的 venue（CVPR、ECCV、ICCV、AAAI、KDD、SIGGRAPH、ACMMM），不执行本子能力，仅在 CSV 中标记 `review_available=no`。
+
+```bash
+python3 $SKILL_ROOT/scripts/enrich_reviews.py \
+  --csv paper_database/accepted_index.csv \
+  --reviews-dir paper_database/reviews \
+  --filter <CONF_YEAR>
+```
+
+| 参数 | 必填 | 说明 | 示例 |
+|------|------|------|------|
+| `--csv` | 是 | accepted_index.csv 路径 | `paper_database/accepted_index.csv` |
+| `--reviews-dir` | 是 | 评审详情 JSON 输出目录 | `paper_database/reviews` |
+| `--filter` | 否 | 仅处理 conf_year 包含此字符串的行 | `ICLR_2025` |
+| `--batch-size` | 否 | 每批查询论文数（默认 50） | `100` |
+| `--delay` | 否 | 批次间延迟秒数（默认 1.0） | `2.0` |
+| `--skip-existing` | 否 | 跳过已有 JSON 文件的论文 | — |
+| `--scores-only` | 否 | 仅拉取评分，不保存 review 全文 | — |
+| `--backfill-ids` | 否 | 先通过 title 匹配补全缺失的 openreview_forum_id | — |
+
+**成功输出**（exit code 0）：
+```
+[reviews] loaded 5695 rows for ICLR_2026
+[reviews] 5414 papers have openreview_forum_id
+[reviews] backfilling forum_id for 281 papers...
+[reviews] backfill done: matched=250, unmatched=31
+[reviews] fetching reviews: batch 1/109...
+[reviews] done: enriched=5600, skipped=64, errors=31
+[reviews] wrote 5600 JSON files to paper_database/reviews/ICLR_2026/
+[reviews] updated CSV: paper_database/accepted_index.csv
+```
+
+主 agent 只需关注 `enriched` 和 `errors` 数字。
+
+**评审详情 JSON 结构**（`paper_database/reviews/{conf_year}/{forum_id}.json`）：
+
+```json
+{
+  "paper_id": "ICLR_2025::xxx",
+  "forum_id": "abc123",
+  "venue": "ICLR",
+  "year": 2025,
+  "score_scale": "1-10",
+  "reviews": [
+    {
+      "reviewer_id": "Reviewer_1",
+      "rating": 8,
+      "confidence": 4,
+      "summary": "...",
+      "strengths": "...",
+      "weaknesses": "...",
+      "questions": "...",
+      "raw_content": "..."
+    }
+  ],
+  "meta_review": {
+    "recommendation": "Accept (Oral)",
+    "content": "..."
+  },
+  "rebuttals": [
+    { "round": 1, "content": "..." }
+  ],
+  "decision": "Accept (Oral)",
+  "fetched_at": "2026-04-19T12:00:00Z"
+}
+```
+
+**评审覆盖率验证**
+
+```bash
+python3 -c "
+import csv
+with open('paper_database/accepted_index.csv') as f:
+    rows = [r for r in csv.DictReader(f) if r['conf_year'] == '<CONF_YEAR>']
+has = sum(1 for r in rows if r.get('review_available','') == 'yes')
+print(f'Reviews: {has}/{len(rows)} ({has/len(rows)*100:.1f}%)')
+"
+```
+
+**不公开评审 venue 的批量标记**
+
+对不公开评审的 venue，运行脚本的 `--mark-unavailable` 模式批量标记：
+
+```bash
+python3 $SKILL_ROOT/scripts/enrich_reviews.py \
+  --csv paper_database/accepted_index.csv \
+  --reviews-dir paper_database/reviews \
+  --mark-unavailable \
+  --filter <CONF_YEAR>
+```
+
+此模式仅将 `review_available` 设为 `no`，不发起任何 API 请求。
+
 ## 输出
 
 | 文件 | 说明 |
 |------|------|
 | `paper_database/accepted_index.csv` | 基础文献索引（schema 见下方） |
 | `paper_database/accepted_index_coverage_report.md` | 覆盖率报告 |
+| `paper_database/reviews/{conf_year}/{forum_id}.json` | 评审详情 JSON（每篇论文一个文件，仅公开评审的 venue） |
 | `$SKILL_ROOT/config/venue_playbooks/` | Venue 级经验手册（经验证的跨年份复用经验，子能力 0 的 prior knowledge 输入） |
 
 ## accepted_index.csv Schema
@@ -328,18 +464,30 @@ print(f'{has}/{len(rows)} ({has/len(rows)*100:.1f}%)')
 | `starttime` | string | 展示开始时间（ISO 8601） |
 | `endtime` | string | 展示结束时间（ISO 8601） |
 | `poster_position` | string | 海报位置编号 |
+| `review_available` | string | 是否有公开评审：`yes` / `no` / `partial` |
+| `review_source` | string | 评审数据来源（如 `openreview_v2`、`arr_dataset`、空） |
+| `review_num_reviewers` | int | 审稿人数量 |
+| `review_score_scale` | string | 评分制度（如 `1-10`、`1-6`、`1-5`） |
+| `review_scores` | string | 各审稿人评分（分号分隔，如 `6;8;5;7`） |
+| `review_score_mean` | float | 平均评分（保留 2 位小数） |
+| `review_confidence_scores` | string | 各审稿人 confidence（分号分隔） |
+| `review_confidence_mean` | float | 平均 confidence（保留 2 位小数） |
+| `review_detail_path` | string | 评审详情 JSON 文件相对路径（如 `paper_database/reviews/ICLR_2025/abc123.json`） |
 
 注：`virtual_id` ~ `poster_position` 字段仅 `virtual_conference_json` 数据源有值，其他数据源为空。
 
+注：`review_*` 字段仅对公开评审的 venue 有值（ICLR、NeurIPS、ICML、ACL/EMNLP），其他 venue 的 `review_available` 为 `no`，其余 review 字段为空。评审详情 JSON 存储在 `paper_database/reviews/{conf_year}/{forum_id}.json`。
+
 ## 新增会议流程
 
-1. 用 `survey_sources.py` 调研该会议的公开 accepted list 情况，重点关注摘要获取途径
+1. 用 `survey_sources.py` 调研该会议的公开 accepted list 情况，重点关注摘要获取途径和评审数据可获取性
 2. 在 `config/source_registry.json` 中添加对应 conference-year 条目（可参考调研报告中的推荐条目）
 3. 运行 `build_accepted_index.py --conf-years <NEW_CONF_YEAR>` 增量抓取
 4. 运行 `enrich_abstracts.py --filter <CONF_YEAR>` 补摘要（S2 batch）
 5. 运行 `enrich_abstracts_fallback.py --filter <CONF_YEAR>` 补摘要（多源 fallback）
 6. 验证摘要覆盖率达到 100%，未达标则 agent 用 web search 逐篇搜索补齐（见子能力 2 第三轮）
-7. 使用 `resmax-embedding` skill 在 GPU 服务器上增量更新 embedding 缓存
+7. 如果调研报告显示该 venue 评审数据可获取，运行 `enrich_reviews.py --filter <CONF_YEAR>` 补全评审信息（见子能力 3）
+8. 使用 `resmax-embedding` skill 在 GPU 服务器上增量更新 embedding 缓存
 
 ## 配置文件说明
 
@@ -369,6 +517,9 @@ print(f'{has}/{len(rows)} ({has/len(rows)*100:.1f}%)')
 - 摘要获取的最佳路径（如"accepted list 无摘要，需通过 ACM DL DOI 或 arXiv 补全"）
 - 已知的 parser kind 和适用年份范围
 - 常见坑点（如"录用列表标题可能与 proceedings 不一致，以 DOI 为准"）
+- 评审数据公开政策（是否公开、平台、评分制度、审稿人数量）
+- 评审数据获取的 API 路径和 invitation pattern
+- 评分制度的年份变更（如"NeurIPS 2025 起评分制度从 1-10 改为 1-6"）
 
 不适合写入的内容：
 - 特定年份的 chunk 哈希、URL 路径等易变细节（这些放 `source_registry.json` 的 `notes`）
@@ -392,9 +543,7 @@ print(f'{has}/{len(rows)} ({has/len(rows)*100:.1f}%)')
 
 ### 全量重建的并发控制
 
-`build_accepted_index.py` 在全量模式下会直接重写 `paper_database/accepted_index.csv` 与 `paper_database/accepted_index_coverage_report.md`。同一工作区内禁止并发启动多个全量重建任务；否则多个进程会竞争写同一产物，导致最终 CSV 来源不确定、coverage report 与终端日志不对应，难以判断真实故障点。
-
-建议做法：任一时刻只保留一个权威全量重建任务，其余历史任务只作为参考日志；需要实时监控时，绑定到这一个任务持续观察 `FAILED`、`0 records`、超时和最终 total records。
+同一工作区内禁止并发启动多个 `build_accepted_index.py` 全量重建任务，否则多个进程会竞争写同一个 `accepted_index.csv`，导致产物来源不确定、监控信号被污染。任一时刻只保留一个权威全量重建任务。
 
 ### 录用等级（acceptance_type）标准化
 
@@ -405,3 +554,24 @@ virtual conference JSON 的 `decision` 字段大小写极不统一（如 `Accept
 - CVPR 2026 引入了 `Highlight` 等级（介于 Oral 和 Poster 之间）
 - NeurIPS 2025 的 event_type 含 `{location}` 占位符（如 `{location} Poster`），不影响推断
 - ICML 2025 有 `Accept (spotlight poster)` 变体，标准化为 Spotlight
+
+### 录用等级映射规则
+
+`build_accepted_index.py` 只能从 virtual conference JSON 的 decision/event_type 推断录用等级。对于不使用 virtual conference JSON 的 venue，或 auxiliary source 未覆盖到的论文，需要在子能力 2 之后额外补全。规则如下：
+
+**A. 有 virtual conference JSON 的 venue（ICLR、NeurIPS、ICML、CVPR、ECCV、ICCV）**：
+- 脚本已自动推断，但 auxiliary source 未覆盖的论文（如 CVPR 中仅在 CVF OpenAccess 出现的论文）acceptance_type 可能为空
+- 补全策略：这些论文默认标记为 `Poster`（CVF OpenAccess 不区分 oral/poster，但未被 virtual conference JSON 收录的论文几乎全是 poster）
+
+**B. ACL/EMNLP（ACL Anthology 数据源）**：
+- decision 字段已有 Main/Findings/Main Short/SRW/Industry/Demo 区分
+- 映射：`Main` → `Main`, `Findings` → `Findings`, `Main Short` → `Main Short`, `SRW` → `SRW`, `Industry` → `Industry`, `Demo` → `Demo`
+
+**C. SIGGRAPH/SIGGRAPH Asia（Ke-Sen Huang 页面）**：
+- keywords_raw 字段有 SIG/TOG/SIG+TOG 区分
+- 映射：`SIG` → `Conference Paper`, `TOG` → `Journal Paper`, `SIG/TOG` → `Conference+Journal`, 空 → `Conference Paper`
+
+**D. 无区分信息的 venue（AAAI、ACMMM、KDD）**：
+- 数据源（OJS proceedings / accepted list HTML）不提供 oral/poster 区分
+- 这些会议也不公开 oral/poster 列表
+- 补全策略：统一标记为 `Poster`

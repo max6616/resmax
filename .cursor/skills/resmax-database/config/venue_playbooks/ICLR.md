@@ -12,6 +12,17 @@
 - Proceedings 页面（HTML）：title, authors, paper_link — 可作为 fallback
 - Virtual HTML 页面：JS 渲染，仅 title — 不推荐
 
+## Review Data
+
+- **Reviews public**: Yes — all submissions (accepted + rejected), fully open since inception
+- **Platform**: OpenReview v2
+- **API group**: `ICLR.cc/{YEAR}/Conference`
+- **Review invitation**: `ICLR.cc/{YEAR}/Conference/Submission{number}/-/Official_Review`
+- **Score scale**: 1-10 (overall rating) + confidence 1-5
+- **Reviewers/paper**: typically 4 (3 auto-assigned + 1 manual by AC)
+- **Data includes**: reviews, author rebuttals, reviewer-author discussion, meta-reviews, decision
+- ICLR is the gold standard for review mining — everything is public for all papers
+
 ## Parser Versions Used
 
 | Year | Parser | URL Pattern | Entry Count |
@@ -26,3 +37,4 @@
 - OpenReview API v2 venue strings: `ICLR {YEAR} Oral` / `ICLR {YEAR} Poster` (capitalized decision type)
 - Virtual JSON `decision` field values: `Accept (Oral)` and `Accept (Poster)`
 - Paper count trend: 2024=2382, 2025=4040, 2026=5695 (~40-70% YoY growth)
+- openreview_forum_id coverage from virtual JSON: ~98-99% (some papers in CVF OpenAccess but not in virtual JSON lack forum_id)
