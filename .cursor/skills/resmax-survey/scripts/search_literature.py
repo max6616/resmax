@@ -2,17 +2,19 @@
 """Search related literature from the paper database for a given research direction.
 
 Pipeline:
-  1. Dual-path retrieval: keyword (~50) + embedding (~50)
-  2. Dedup & merge (≤100 candidates)
-  3. Meta enrichment (ensure abstract + PDF link)
-  4. Generate unscored literature document
-  5. [Agent mode] Subagent per-paper scoring
-  6. [Agent mode] Main agent review
-  7. Sort by grade, generate final scored document
+  1.   Dual-path retrieval: keyword (~50) + embedding (~50)
+  2.   Dedup & merge (≤100 candidates)
+  3.   Meta enrichment (ensure abstract + PDF link)
+  3.5. Openness deepcheck (HF Hub lookup + repo-review prompt emission)
+  4.   Generate unscored literature document
+  5.   [Agent mode] Subagent per-paper scoring
+  5.5. [Agent mode, optional] Dispatch repo-review prompts for S/A papers
+  6.   [Agent mode] Main agent review
+  7.   Sort by grade, generate final scored document
 
 Stages 5-7 require the Cursor agent environment (subagent dispatch).
 In script mode, the pipeline stops after stage 4 and outputs an unscored
-document + CSV for the agent to pick up.
+document + CSV plus a `deepcheck_prompts.json` for the agent to pick up.
 
 Examples:
   python3 search_literature.py \\
@@ -208,6 +210,67 @@ def main(argv: list[str] | None = None) -> int:
           f"PDF {pdf_count}/{len(candidates)} ({pdf_pct:.0f}%)")
     if abs_pct < 80:
         print(f"[WARN] abstract coverage below 80% — subagent scoring quality may be degraded")
+
+    # --- Stage 3.5: Openness deepcheck (Level A passthrough + B HF lookup + C prompts) ---
+    dc_config = config.get("openness_deepcheck", {}) or {}
+    if dc_config.get("enabled", False):
+        print(f"\n{'='*60}")
+        print(f"[Stage 3.5] Openness deepcheck")
+        print(f"{'='*60}")
+
+        from search_literature_lib.openness_deepcheck import enrich_openness_deep
+        import csv as _csv
+
+        _csv.field_size_limit(10 * 1024 * 1024)
+        rows_by_id: dict[str, dict] = {}
+        with accepted_path.open("r", encoding="utf-8", newline="") as f:
+            for _row in _csv.DictReader(f):
+                pid = _row.get("paper_id", "")
+                if pid:
+                    rows_by_id[pid] = _row
+
+        with log.start_stage("openness_deepcheck"):
+            deep_results = enrich_openness_deep(
+                candidates,
+                accepted_index_rows_by_id=rows_by_id,
+                enable_hf=dc_config.get("enable_hf_hub", True),
+                hf_rate_limit_delay=dc_config.get("hf_rate_limit_delay", 0.3),
+                verbose=True,
+            )
+
+        for pid, entry in deep_results.items():
+            for cand in candidates:
+                if cand.paper_id == pid:
+                    cand.hf_models = ",".join(entry.get("hf_models", []) or [])
+                    cand.hf_datasets = ",".join(entry.get("hf_datasets", []) or [])
+                    break
+
+        if dc_config.get("emit_repo_review_prompts", True):
+            prompts_file = out_dir / "deepcheck_prompts.json"
+            prompts_payload = {
+                pid: {
+                    "title": next((c.title for c in candidates if c.paper_id == pid), ""),
+                    "code_url": next((c.code_url for c in candidates if c.paper_id == pid), ""),
+                    "ai_score": next((c.ai_score for c in candidates if c.paper_id == pid), ""),
+                    "prompt": entry.get("repo_review_prompt"),
+                }
+                for pid, entry in deep_results.items()
+                if entry.get("repo_review_prompt")
+            }
+            prompts_file.write_text(
+                json.dumps(prompts_payload, ensure_ascii=False, indent=2),
+                encoding="utf-8",
+            )
+            print(f"[deepcheck] wrote {len(prompts_payload)} repo-review prompts to {prompts_file.name}")
+
+        with_code = sum(1 for c in candidates if c.code_url)
+        with_real = sum(1 for c in candidates if c.code_is_real == "yes")
+        with_weights = sum(1 for c in candidates if c.has_pretrained_weights == "yes")
+        hf_model_hits = sum(1 for c in candidates if c.hf_models)
+        print(
+            f"[deepcheck] candidates with code_url={with_code}, confirmed real={with_real}, "
+            f"weights={with_weights}, HF-model-hits={hf_model_hits}"
+        )
 
     # --- Stage 4: Generate unscored document + CSV ---
     print(f"\n{'='*60}")

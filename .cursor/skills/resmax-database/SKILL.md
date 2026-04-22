@@ -54,16 +54,33 @@ SKILL_ROOT=.cursor/skills/resmax-database
 当用户说"全量重建"时，主 agent 必须端到端执行以下完整流程，不得在任何中间步骤停止：
 
 1. **子能力 1：抓取论文目录** — 运行 `build_accepted_index.py --force`（不带 `--conf-years` 过滤）
-2. **子能力 2-摘要补全** — 对每个缺摘要的 conf_year 依次执行第一轮（S2 batch）→ 第二轮（多源 fallback）→ 第三轮（web search 兜底），直到摘要覆盖率 100%
+2. **子能力 5：统一元信息补全** — 对全量 CSV 运行 `enrich_all.py`（无 filter），Stage 顺序 abstracts → reviews → code_urls → code_quality → openness
+   - 子能力 2 的第三轮兜底（orchestrator subagent / 主 agent 直接 web search）仍需单独执行，`enrich_all.py` 只覆盖前两轮
 3. **acceptance_type 补全** — 对每个 acceptance_type 为空或为无区分度 "Accept" 的 conf_year，按下文"录用等级映射规则"补全
-4. **子能力 3-评审补全** — 对公开评审的 venue 运行 `enrich_reviews.py`；对不公开的 venue 运行 `--mark-unavailable` 标记
-5. **最终验证** — 检查所有 conf_year 的摘要覆盖率 = 100%、acceptance_type 覆盖率 = 100% 且无 "Accept"、论文总数不低于重建前；公开评审 venue 的评审覆盖率应接近 openreview_forum_id 覆盖率
+4. **最终验证** — 检查所有 conf_year 的摘要覆盖率 = 100%、acceptance_type 覆盖率 = 100% 且无 "Accept"、论文总数不低于重建前；公开评审 venue 的评审覆盖率应接近 openreview_forum_id 覆盖率
 
 全量重建时 `build_accepted_index.py` 会从零开始构建 CSV（`loaded 0 existing records` 是正常的，说明旧 CSV 不存在或已被用户重命名为备份）。这意味着旧 CSV 中通过 enrich 脚本补全的字段（abstract_raw、doi、arxiv_id 等）不会被自动保留，必须在子能力 1 完成后通过子能力 2 重新补全。
 
 **硬性约束**：全量重建不得在子能力 1 完成后就停止。子能力 1 产出的 CSV 只有论文目录骨架，缺少摘要和细粒度录用等级，不是可用的最终产物。
 
-## 四个子能力
+## 子能力总览
+
+本 skill 提供六个子能力：
+
+| # | 名称 | 执行方式 | 成本 | 建议调用时机 |
+|---|------|---------|------|-------------|
+| 0 | 数据源调研 | subagent | 低 | 新增 venue 前 |
+| 1 | Accepted list 抓取 | 脚本 | 低 | build 阶段 |
+| 2 | 摘要批量补全 | 脚本 + subagent 兜底 | 中 | build 之后 |
+| 3 | 评审信息补全 | 脚本 | 中 | 仅公开评审 venue |
+| 4 | 开源信息补全（轻量全局） | 脚本 | 低-中 | 摘要补完之后 |
+| 5 | 统一编排入口 `enrich_all.py` | 脚本 | 视 stage 而定 | 多 stage 串起来跑 |
+
+**全局层开源信息补全的边界**：本 skill 只做**低成本、高置信度**的全量统计，包括代码链接补全、GitHub 仓库存在性 / stars / 最后 push / 主语言、以及摘要关键词扫出的权重/数据集声明。精细的仓库质量评估（full / partial / skeleton）、PDF 兜底扫 github 链接、HuggingFace Hub 精确匹配等**高成本判断**由 `resmax-survey` 的 Stage 3.5（openness deepcheck）在检索到相关论文后补充，见 `resmax-survey/SKILL.md`。
+
+理由：跑 65k 论文的精细质量判断要上万次 API 和 agent 调用（>10h，误判率高），而真正被下游使用的只有检索得到的那 ~100 篇。ROI 不划算。
+
+## 子能力详解
 
 ### 0. 数据源调研（新增会议的前置步骤，subagent 执行）
 
@@ -417,6 +434,155 @@ python3 $SKILL_ROOT/scripts/enrich_reviews.py \
 
 此模式仅将 `review_available` 设为 `no`，不发起任何 API 请求。
 
+### 4. 开源信息补全（轻量全局）
+
+统计论文的代码开源状态和基本仓库信息。三个脚本对应独立维度，可单独调用或通过 `enrich_all.py` 串联。
+
+**覆盖率的实际基线**：在 65k 论文的全量统计中，`code_url` 覆盖率极限约 **45%**（PWC official 仓库 0 漏），剩下 55% 绝大多数是没有开源的论文或新会议尚未被 PWC 收录。想进一步提升得扫 PDF 首页 footnote，ROI 在全局层不划算，已挪到 `resmax-survey` 的 Stage 3.5。
+
+**全局层边界**：本子能力只做**低成本、高置信度**的统计。`code_quality`（full / partial / skeleton）、HuggingFace Hub 精确匹配、PDF 扫描等**高成本判断**由 `resmax-survey` 的 openness deepcheck 在检索到 S/A 论文后补充。理由详见本文件"子能力总览"节。
+
+**第一步：代码链接补全（`enrich_code_urls.py`）**
+
+从 Papers With Code 历史 dump、Semantic Scholar batch API、摘要正则提取三路补全 `code_url`。
+
+```bash
+python3 $SKILL_ROOT/scripts/enrich_code_urls.py \
+  --csv paper_database/accepted_index.csv \
+  --filter <CONF_YEAR>
+```
+
+| 参数 | 必填 | 说明 | 示例 |
+|------|------|------|------|
+| `--csv` | 是 | accepted_index.csv 路径 | `paper_database/accepted_index.csv` |
+| `--filter` | 否 | 仅处理 conf_year 包含此字符串的行 | `ICLR_2026` |
+| `--pwc-dump` | 否 | PWC dump 文件目录（默认 `/tmp/pwc_dump`） | `/data/pwc` |
+| `--skip-pwc` | 否 | 跳过 PWC dump 匹配 | — |
+| `--skip-s2` | 否 | 跳过 S2 API 查询 | — |
+| `--skip-regex` | 否 | 跳过摘要正则提取 | — |
+| `--dry-run` | 否 | 仅统计，不写入 | — |
+
+数据源优先级：PWC dump → S2 API → 摘要正则。每个源只补全尚无 `code_url` 的行。
+
+**成功输出**（exit code 0）：
+```
+[enrich_code_urls] loaded 5471 rows (filter=ICLR_2026)
+[enrich_code_urls] 2250 already have code_url, 3221 missing
+[PWC] enriched 1200 papers
+[S2] enriched 300 papers
+[Regex] enriched 150 papers
+[enrich_code_urls] done: enriched=1650 (PWC=1200, S2=300, regex=150)
+[enrich_code_urls] final: 3900/5471 (71.3%), still_missing=1571
+```
+
+**第二步：仓库轻量探测（`enrich_code_quality.py`）**
+
+对每个 GitHub 仓库**只发起 1 次** `/repos/{owner}/{repo}` API 请求，拿四个字段：存在性、stars、最后 push 时间（`pushed_at`）、主语言（`language`）。相比老版本（每仓库 3-4 次请求）快约 4 倍。并发（默认 8 workers）+ 断点续传。
+
+```bash
+GITHUB_TOKEN=<token> python3 $SKILL_ROOT/scripts/enrich_code_quality.py \
+  --csv paper_database/accepted_index.csv \
+  --filter <CONF_YEAR>
+```
+
+| 参数 | 必填 | 说明 | 默认 |
+|------|------|------|------|
+| `--csv` | 是 | CSV 路径 | — |
+| `--filter` | 否 | conf_year 子串过滤 | 全部 |
+| `--workers` | 否 | 并发数（建议 4-12） | 8 |
+| `--checkpoint` | 否 | 断点续传 JSON | `<csv>.code_quality_ckpt.json` |
+| `--refresh-stale-days` | 否 | 缓存过期天数（0 = 永不刷新） | 0 |
+| `--dry-run` | 否 | 不写 CSV | — |
+
+**环境变量**：`GITHUB_TOKEN`（未设时 rate limit 仅 60 req/h，几乎不可用）。
+
+**性能**：8 worker 下约 2-3 repo/s，29k 仓库约 2-4 小时。结果字段：
+- `code_is_real` ∈ `yes` / `404` / `empty` / `error:XXX`
+- `code_stars` — stars 数（字符串）
+- `code_last_commit` — 仓库 `pushed_at`（ISO 8601）
+- `code_primary_language` — GitHub 识别的主语言
+
+**成功输出**（exit code 0）：
+```
+[code_quality] 3900 repos to probe (filter=ICLR_2026, workers=8)
+[code_quality] cache hits: 0, need to probe: 3900
+  [100/3900] rate=2.4/s, eta=26.4min
+  ...
+[code_quality] done: probed=3900, cached=0, errors=12
+[code_quality] results: {'yes': 3500, '404': 200, 'empty': 50, 'error:TimeoutError': 150}
+```
+
+**刻意不做的事**：不评估 `code_quality`（full / partial / skeleton）。单次 `/repos` 响应的信息不足以判断，启发式容易误判。这个维度由 `resmax-survey` 在 S/A 论文层面通过 agent 阅读 README 和仓库结构完成。
+
+**第三步：摘要本地扫描（`enrich_openness.py`）**
+
+**零网络**、纯本地正则/关键词扫描，对摘要里的权重发布声明和数据集属性做粗判。65k 摘要全量扫约 5 秒。
+
+```bash
+python3 $SKILL_ROOT/scripts/enrich_openness.py \
+  --csv paper_database/accepted_index.csv \
+  --filter <CONF_YEAR>
+```
+
+| 参数 | 必填 | 说明 |
+|------|------|------|
+| `--csv` | 是 | CSV 路径 |
+| `--filter` | 否 | conf_year 子串过滤 |
+| `--refresh` | 否 | 强制重扫（即使已有值） |
+| `--dry-run` | 否 | 不写 CSV |
+
+**输出字段取值**：
+- `has_pretrained_weights` ∈ `yes` / `no_promise`（文中承诺但没给链接）/ `unknown`
+- `has_dataset` ∈ `public` / `private` / `standard_only`（只用公开 benchmark）/ `unknown`
+
+**重要**：本步骤只做**粗筛**。HuggingFace Hub 精确匹配、PDF 扫描由 `resmax-survey` Stage 3.5 做。这里保留大量 `unknown` 是合理的 — 下游 S/A 论文会被再次精确判定。
+
+**成功输出**（实测 ICLR_2026 5471 篇 3 秒）：
+```
+[openness] 5471 rows in scope, 5471 need scanning
+[openness] weight stats: {'unknown': 5231, 'yes': 169, 'no_promise': 71}
+[openness] dataset stats: {'unknown': 5295, 'public': 72, 'private': 15, 'standard_only': 89}
+```
+
+### 5. 统一编排入口（`enrich_all.py`）
+
+**用途**：把子能力 2、3、4 的所有 stage 按正确顺序串起来，一条命令跑完。新增会议 / 全量重建后补完元信息的推荐入口。
+
+Stage 顺序：`abstracts` → `reviews` → `code_urls` → `code_quality` → `openness`
+
+```bash
+# 新增会议一条龙（推荐）
+GITHUB_TOKEN=<token> python3 $SKILL_ROOT/scripts/enrich_all.py \
+  --csv paper_database/accepted_index.csv \
+  --filter <CONF_YEAR>
+
+# 全量刷一次除慢 stage 外的所有元信息
+python3 $SKILL_ROOT/scripts/enrich_all.py \
+  --csv paper_database/accepted_index.csv \
+  --skip-code-quality
+
+# 只跑某个 stage
+python3 $SKILL_ROOT/scripts/enrich_all.py \
+  --csv paper_database/accepted_index.csv \
+  --only openness --refresh
+```
+
+| 参数 | 说明 |
+|------|------|
+| `--csv` | CSV 路径（必填） |
+| `--filter` | conf_year 子串，传到每个 stage |
+| `--only <names>` | 只跑指定 stage（逗号分隔），覆盖 skip 标志 |
+| `--skip-abstracts` / `--skip-reviews` / `--skip-code-urls` / `--skip-code-quality` / `--skip-openness` | 跳过特定 stage |
+| `--strict` | 任一 stage 失败就停（默认继续） |
+| `--workers` | GitHub 探测并发（默认 8） |
+| `--refresh` | openness 阶段强制重扫 |
+| `--reviews-dir` | 评审 JSON 目录（默认 `<csv_dir>/reviews`） |
+| `--dry-run` | 传给所有 stage，不写 CSV |
+
+**自动跳过规则**：`code_quality` 在 `GITHUB_TOKEN` 未设置时自动跳过。
+
+**退出码**：0 = 全部成功，2 = 至少一个 stage 非 0。
+
 ## 输出
 
 | 文件 | 说明 |
@@ -424,6 +590,7 @@ python3 $SKILL_ROOT/scripts/enrich_reviews.py \
 | `paper_database/accepted_index.csv` | 基础文献索引（schema 见下方） |
 | `paper_database/accepted_index_coverage_report.md` | 覆盖率报告 |
 | `paper_database/reviews/{conf_year}/{forum_id}.json` | 评审详情 JSON（每篇论文一个文件，仅公开评审的 venue） |
+| `paper_database/accepted_index.code_quality_ckpt.json` | GitHub 仓库探测断点续传缓存（子能力 4 第二步） |
 | `$SKILL_ROOT/config/venue_playbooks/` | Venue 级经验手册（经验证的跨年份复用经验，子能力 0 的 prior knowledge 输入） |
 
 ## accepted_index.csv Schema
@@ -473,21 +640,33 @@ python3 $SKILL_ROOT/scripts/enrich_reviews.py \
 | `review_confidence_scores` | string | 各审稿人 confidence（分号分隔） |
 | `review_confidence_mean` | float | 平均 confidence（保留 2 位小数） |
 | `review_detail_path` | string | 评审详情 JSON 文件相对路径（如 `paper_database/reviews/ICLR_2025/abc123.json`） |
+| `code_is_real` | string | 仓库是否真实存在：`yes` / `404` / `empty` / `error:<type>` |
+| `code_stars` | int | GitHub stars 数（字符串） |
+| `code_last_commit` | string | 仓库 `pushed_at`（ISO 8601） |
+| `code_primary_language` | string | GitHub 识别的主语言（如 `Python`、`C++`） |
+| `has_pretrained_weights` | string | 权重可用性粗判：`yes` / `no_promise` / `unknown` |
+| `has_dataset` | string | 数据集粗判：`public` / `private` / `standard_only` / `unknown` |
 
 注：`virtual_id` ~ `poster_position` 字段仅 `virtual_conference_json` 数据源有值，其他数据源为空。
 
 注：`review_*` 字段仅对公开评审的 venue 有值（ICLR、NeurIPS、ICML、ACL/EMNLP），其他 venue 的 `review_available` 为 `no`，其余 review 字段为空。评审详情 JSON 存储在 `paper_database/reviews/{conf_year}/{forum_id}.json`。
+
+注：`code_is_real` ~ `code_primary_language` 字段由 `enrich_code_quality.py` 填充，仅对有 `code_url` 且指向 GitHub 仓库的论文有值。`has_pretrained_weights` 和 `has_dataset` 由 `enrich_openness.py` 纯本地摘要扫描填充（粗筛），`resmax-survey` 的 Stage 3.5 会对 S/A 论文进一步精确判定。
+
+**已删除字段**：原 `code_quality`（full/partial/skeleton）和 `code_framework` 已不再在全局层填充。`code_quality` 移到 `resmax-survey` 层基于 agent 读 README 评估；`code_framework` 信息量小于 `code_primary_language`，已被后者取代。旧 CSV 如仍保留这两列，脚本不会主动删除，但也不会再更新。
 
 ## 新增会议流程
 
 1. 用 `survey_sources.py` 调研该会议的公开 accepted list 情况，重点关注摘要获取途径和评审数据可获取性
 2. 在 `config/source_registry.json` 中添加对应 conference-year 条目（可参考调研报告中的推荐条目）
 3. 运行 `build_accepted_index.py --conf-years <NEW_CONF_YEAR>` 增量抓取
-4. 运行 `enrich_abstracts.py --filter <CONF_YEAR>` 补摘要（S2 batch）
-5. 运行 `enrich_abstracts_fallback.py --filter <CONF_YEAR>` 补摘要（多源 fallback）
-6. 验证摘要覆盖率达到 100%，未达标则 agent 用 web search 逐篇搜索补齐（见子能力 2 第三轮）
-7. 如果调研报告显示该 venue 评审数据可获取，运行 `enrich_reviews.py --filter <CONF_YEAR>` 补全评审信息（见子能力 3）
-8. 使用 `resmax-embedding` skill 在 GPU 服务器上增量更新 embedding 缓存
+4. **运行 `enrich_all.py --filter <CONF_YEAR>`**（统一入口，见子能力 5）一次性补完摘要、评审、开源信息
+   - 未设置 `GITHUB_TOKEN` 时会自动跳过 `code_quality` stage，其他 stage 照跑
+   - 如果第三轮摘要兜底（orchestrator subagent / 主 agent 直接搜）仍有缺口，走子能力 2 的第三轮兜底流程
+5. 验证摘要覆盖率达到 100%
+6. 使用 `resmax-embedding` skill 在 GPU 服务器上增量更新 embedding 缓存
+
+**说明**：推荐用 `enrich_all.py` 作为统一入口，不建议再逐个调用 `enrich_abstracts.py` / `enrich_reviews.py` / `enrich_code_*.py`。它们仍可单独使用（见各子能力说明），但一条龙入口保证 stage 顺序和错误处理一致。
 
 ## 新增期刊流程
 
@@ -548,6 +727,8 @@ python3 $SKILL_ROOT/scripts/enrich_reviews.py \
 |------|------|------|
 | `OPENALEX_API_KEY` | OpenAlex API key（免费注册获取） | 期刊入库时必填，否则每天仅 100 次请求 |
 | `SERPAPI_KEY` | SerpAPI key（摘要兜底搜索用） | 否 |
+| `GITHUB_TOKEN` | GitHub personal access token（子能力 4 仓库质量探测用，无 token 时 rate limit 仅 60 req/h） | 子能力 4 第二步强烈建议 |
+| `S2_API_KEY` | Semantic Scholar API key（子能力 4 代码链接补全用，提升 rate limit） | 否 |
 
 ## 经验沉淀规则
 

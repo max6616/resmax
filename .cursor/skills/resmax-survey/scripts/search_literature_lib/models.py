@@ -56,6 +56,21 @@ class CandidatePaper:
     presentation_type: str = ""
     citation_count: str = ""
 
+    # --- openness passthrough (from accepted_index, enriched by resmax-database) ---
+    code_url: str = ""
+    code_is_real: str = ""
+    code_stars: str = ""
+    code_last_commit: str = ""
+    code_primary_language: str = ""
+    has_pretrained_weights: str = ""
+    has_dataset: str = ""
+
+    # --- openness deepcheck (populated in Stage 3.5) ---
+    code_quality: str = ""              # full / partial / skeleton / dead (agent verdict)
+    hf_models: str = ""                  # comma-separated HF model IDs
+    hf_datasets: str = ""                # comma-separated HF dataset IDs
+    reproduction_readiness: int = 0     # 0-5 integer from agent review
+
 
 RESEARCH_INDEX_FIELDS = [f.name for f in fields(CandidatePaper)]
 
@@ -85,6 +100,13 @@ def load_accepted_index(path: Path) -> list[CandidatePaper]:
                 openreview_rating_mean=row.get("review_score_mean", ""),
                 openreview_confidence_mean=row.get("review_confidence_mean", ""),
                 openreview_decision=row.get("decision", ""),
+                code_url=row.get("code_url", ""),
+                code_is_real=row.get("code_is_real", ""),
+                code_stars=row.get("code_stars", ""),
+                code_last_commit=row.get("code_last_commit", ""),
+                code_primary_language=row.get("code_primary_language", ""),
+                has_pretrained_weights=row.get("has_pretrained_weights", ""),
+                has_dataset=row.get("has_dataset", ""),
             ))
     return records
 

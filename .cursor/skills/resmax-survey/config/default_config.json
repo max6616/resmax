@@ -18,6 +18,13 @@
   "meta_enrich": {
     "arxiv_delay": 0.5
   },
+  "openness_deepcheck": {
+    "enabled": true,
+    "run_on": "SA",
+    "enable_hf_hub": true,
+    "hf_rate_limit_delay": 0.3,
+    "emit_repo_review_prompts": true
+  },
   "scoring": {
     "criteria": {
       "S": "Highly relevant — direct baseline or core related work",

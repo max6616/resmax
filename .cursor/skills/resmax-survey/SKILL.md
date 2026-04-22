@@ -45,8 +45,10 @@ SKILL_ROOT=.cursor/skills/resmax-survey
 | 1 | 关键词检索 (~50) + embedding 语义检索 (~50) | 脚本 |
 | 2 | 按 paper_id 去重合并 (≤100) | 脚本 |
 | 3 | 逐篇元信息补充（摘要 + PDF 链接） | 脚本 |
+| 3.5 | 开源信息深度补全（passthrough + HF Hub 精查 + 仓库评估 prompt 导出） | 脚本 |
 | 4 | 生成无评分文献文档 + CSV + 日志 | 脚本 |
 | 5 | orchestrator subagent 批量评分 → scores_raw.json | agent（单次 Task） |
+| 5.5 | （可选）对 S/A 论文派发仓库评审 subagent | agent |
 | 6 | 主 agent review 评分合理性 | agent |
 | 7 | 按评分排序，生成最终文献列表 | agent |
 
@@ -90,6 +92,66 @@ python3 $SKILL_ROOT/scripts/search_literature.py \
 | `--embedding-top-k` | 否 | embedding 检索 top-K | `50` |
 | `--keyword-top-k` | 否 | 关键词检索 top-K | `50` |
 | `--max-candidates` | 否 | 合并后最大候选数 | `100` |
+
+### Stage 3.5：开源信息深度补全（脚本自动执行，可配置开关）
+
+在 `resmax-database` 的全局轻量开源补全之后，本 stage 对检索到的 100 篇候选做精细化补充。由 `search_literature.py` 自动调用，无需额外命令。
+
+**三级覆盖**：
+
+- **Level A — passthrough**：从 `accepted_index.csv` 复制已有字段到候选（`code_url`、`code_is_real`、`code_stars`、`code_last_commit`、`code_primary_language`、`has_pretrained_weights`、`has_dataset`）。零网络。
+- **Level B — HuggingFace Hub 精确查询**：对有 `arxiv_id` 的候选调用 HF Hub API，按 arxiv_id 匹配（tag 或 id 子串）找出挂名的模型/数据集。写入 `hf_models`、`hf_datasets`。100 个候选约 30 秒。
+- **Level C — 仓库评审 prompt 导出**：对每个有 `github.com` URL 的候选生成一段结构化 prompt，写入 `deepcheck_prompts.json`。Stage 3.5 本身**不派发** agent；由 Stage 5.5（可选）在 S/A 论文确定后派发。
+
+**配置**（`$SKILL_ROOT/config/default_config.json` 的 `openness_deepcheck` 节）：
+
+```json
+"openness_deepcheck": {
+  "enabled": true,
+  "run_on": "SA",
+  "enable_hf_hub": true,
+  "hf_rate_limit_delay": 0.3,
+  "emit_repo_review_prompts": true
+}
+```
+
+- `enabled`：总开关。默认 `true`。
+- `enable_hf_hub`：关闭可去除 HF Hub 的网络调用（对离线场景）。
+- `emit_repo_review_prompts`：是否写 `deepcheck_prompts.json`。
+
+**产物**：`literature_research/<direction_slug>/deepcheck_prompts.json`，结构为 `{paper_id: {title, code_url, ai_score, prompt}}`。Stage 5.5 消费。
+
+### Stage 5.5：（可选）S/A 论文的仓库评审派发
+
+在 Stage 5 评分结束后，主 agent 可选择对 `final_score` 为 `S` 或 `A` 的论文派发仓库评审 subagent：
+
+1. 读取 `deepcheck_prompts.json`，过滤出 S/A 的条目
+2. 每个 paper 派一个 subagent（`subagent_type="generalPurpose"`，`model="fast"`），prompt 直接用文件中的 `prompt` 字段
+3. 收集 agent 返回的 JSON（`code_quality` / `has_pretrained_weights_confirmed` / `has_dataset_confirmed` / `reproduction_readiness` / `notes`）
+4. 用 `openness_deepcheck.apply_repo_review_results(candidates, results)` 写回候选
+
+```python
+# 伪代码 — Stage 5.5
+import json
+from search_literature_lib.openness_deepcheck import apply_repo_review_results
+
+with open(out_dir / 'deepcheck_prompts.json') as f:
+    prompts = json.load(f)
+
+sa_prompts = {pid: p for pid, p in prompts.items() if p.get('ai_score') in ('S', 'A')}
+
+reviews: dict[str, dict] = {}
+for pid, p in sa_prompts.items():
+    resp = Task(prompt=p['prompt'], subagent_type='generalPurpose', model='fast')
+    try:
+        reviews[pid] = json.loads(resp)
+    except Exception:
+        continue
+
+apply_repo_review_results(candidates, reviews)
+```
+
+**跳过条件**：如果 `deepcheck_prompts.json` 为空或 S/A 论文都没有 `github.com` URL，直接跳过 Stage 5.5，走 Stage 6+7。
 
 ### Stages 5-7：agent 执行（硬性）
 
@@ -168,6 +230,7 @@ log.write(out_dir / 'filter_log.md')
 |------|------|
 | `research_index.csv` | 方向级 research index，含评分 |
 | `scores_raw.json` | orchestrator 产出的原始评分（中间文件） |
+| `deepcheck_prompts.json` | Stage 3.5 生成的仓库评审 prompt（中间文件，Stage 5.5 消费） |
 | `literature_list.md` | 按评分排序的文献列表 |
 | `filter_log.md` | 可读筛选日志 |
 | `filter_log_state.json` | 可恢复日志状态 |
@@ -200,3 +263,14 @@ log.write(out_dir / 'filter_log.md')
 | `openreview_decision` | string | OpenReview 决定（从 `accepted_index.csv` 的 `decision` 字段读取） |
 | `presentation_type` | string | 展示类型（oral / poster / spotlight） |
 | `citation_count` | int | 引用数 |
+| `code_url` | string | 代码仓库 URL（passthrough，Stage 3.5 Level A） |
+| `code_is_real` | string | 仓库存在且非空（passthrough） |
+| `code_stars` | int | GitHub star 数（passthrough） |
+| `code_last_commit` | string | 最近 push 时间 ISO8601（passthrough） |
+| `code_primary_language` | string | 主语言（passthrough） |
+| `has_pretrained_weights` | string | 摘要层 weights 扫描结果（`yes`/`no`/`unknown`，passthrough） |
+| `has_dataset` | string | 摘要层 dataset 扫描结果（`yes`/`no`/`unknown`，passthrough） |
+| `hf_models` | string | 分号分隔的 HuggingFace 模型 repo id（Stage 3.5 Level B） |
+| `hf_datasets` | string | 分号分隔的 HuggingFace 数据集 repo id（Stage 3.5 Level B） |
+| `code_quality` | string | 仓库评审等级（`complete`/`partial`/`stub`/`unknown`，Stage 5.5 写入） |
+| `reproduction_readiness` | string | 可复现评估（`full`/`partial`/`none`，Stage 5.5 写入） |
