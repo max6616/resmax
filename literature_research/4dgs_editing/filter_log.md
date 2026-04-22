@@ -136,3 +136,16 @@
 | meta_enrich | 0.0 |
 | retrieval | 29.7 |
 | **total** | **52778.1** |
+
+## Stage 5.5: Openness Deep Check (S papers only)
+
+- Total S papers: 11
+- Source cached (arxiv TeX): 5
+- Source cached (mineru MD): 5
+- No source (no arxiv_id and no PDF URL): 1
+- Repo reviews dispatched: 8
+- code_quality=full: 7
+- code_quality=project_page_only: 1 (CTRL-D)
+- code_quality=unknown (could not reach repo): 3
+
+Details in `deepcheck_results.md` and `deepcheck_reviews.json`.

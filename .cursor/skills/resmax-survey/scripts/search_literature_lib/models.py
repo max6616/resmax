@@ -71,6 +71,21 @@ class CandidatePaper:
     hf_datasets: str = ""                # comma-separated HF dataset IDs
     reproduction_readiness: int = 0     # 0-5 integer from agent review
 
+    # --- paper-source cache (Stage 5.5.a; feeds 5.5.b and future stages) ---
+    # New layout: each paper gets its own folder under paper_sources/ and may
+    # hold paper.pdf, paper.pdftxt, paper.md, paper.tex, arxiv_source.tar.gz.
+    source_cache_path: str = ""          # per-paper folder name under paper_sources/
+    source_cache_type: str = ""          # comma-separated tags present: "tex,pdf,md,arxiv"
+    paper_github_urls: str = ""          # semicolon-separated URLs (github.com and *.github.io), unioned across sources
+
+    # --- reserved for future stages (novelty / SOTA / baseline analysis) ---
+    novelty_claims: str = ""             # populated by a future subagent on paper body
+    baselines_used: str = ""             # semicolon-separated baseline names
+    datasets_used: str = ""              # semicolon-separated dataset names
+    base_models_used: str = ""           # semicolon-separated base model names (LLM/VLM/Diffusion)
+    sota_claims: str = ""                # short summary of SOTA claims
+    reproducibility_signal: str = ""     # full / partial / none — body-level assessment
+
 
 RESEARCH_INDEX_FIELDS = [f.name for f in fields(CandidatePaper)]
 

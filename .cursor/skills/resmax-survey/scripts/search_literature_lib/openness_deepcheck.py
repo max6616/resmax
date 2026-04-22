@@ -131,9 +131,10 @@ def hf_lookup_by_arxiv(arxiv_id: str) -> dict[str, list[str]]:
 # Level C: agent prompt for repo quality review
 # ---------------------------------------------------------------------------
 
-REPO_REVIEW_PROMPT_TEMPLATE = """You are reviewing a GitHub repository accompanying an academic paper.
-Decide whether the repo is a **real implementation** that would let a researcher
-reproduce the paper's main results, or only a skeleton / placeholder.
+REPO_REVIEW_PROMPT_TEMPLATE = """You are reviewing the openness of an academic paper.
+Decide whether the authors have released a **real implementation** that would let
+a researcher reproduce the paper's main results, or only a project page /
+skeleton / placeholder.
 
 PAPER
   Title: {title}
@@ -141,64 +142,89 @@ PAPER
   Abstract (excerpt):
     {abstract_excerpt}
 
-REPOSITORY
-  URL: {code_url}
-  Stars: {stars}
-  Last push: {last_commit}
-  Primary language: {primary_lang}
+KNOWN LINKS (at least one is present — they may be inconsistent, cross-check them)
+  Primary code URL (from accepted list): {code_url}
+  GitHub URLs mined from paper body:      {paper_github_urls}
+  Project/page URL:                        {project_url}
+  Repo stars (if known):                   {stars}
+  Last push (if known):                    {last_commit}
+  Primary language (if known):             {primary_lang}
 
 TASK
-  1. Visit the repo URL (use WebFetch).
-  2. Read the README, top-level file listing, and any `examples/` or
-     `scripts/` directory.
-  3. Assess whether the repo contains:
+  1. WebFetch the most authoritative URL first (prefer a github.com/<owner>/<repo>
+     mined from the paper body; otherwise fall back to the primary code URL; otherwise
+     the project page).
+  2. If you land on a project page, look for a GitHub link on that page and WebFetch it.
+  3. If the github URL is a 404, empty, or obviously a template, report accordingly.
+  4. Read README, top-level file listing, and any `scripts/` or `configs/` directory.
+  5. Assess whether the repo contains:
      - Actual training/inference code for the paper's method?
      - A requirements/environment file?
      - Config files or scripts to reproduce the main table/figure?
-     - Pretrained weights (links or checkpoints)?
+     - Pretrained weights (links or checkpoints) — including HuggingFace, Drive, etc.?
      - Dataset (included, linked, or documented)?
 
 OUTPUT — return ONLY a JSON object with these keys:
 {{
-  "code_quality": "full" | "partial" | "skeleton" | "dead",
+  "resolved_repo_url": "the github URL you actually reviewed, or \\"\\" if none reachable",
+  "code_quality": "full" | "partial" | "skeleton" | "dead" | "project_page_only",
   "has_pretrained_weights_confirmed": "yes" | "no" | "linked",
   "has_dataset_confirmed": "public" | "private" | "standard" | "unknown",
   "reproduction_readiness": 0-5 integer,
-  "notes": "one-sentence justification"
+  "notes": "one-sentence justification (include star count and last push date if seen)"
 }}
 
 Definitions:
-  full         = training + inference + config, runnable end-to-end
-  partial      = inference only, OR missing configs/scripts
-  skeleton     = README promise + stub code, not runnable
-  dead         = 404, empty, last commit > 2 years before paper
+  full               = training + inference + config, runnable end-to-end
+  partial            = inference only, OR missing configs/scripts
+  skeleton           = README promise + stub code, not runnable
+  dead               = 404, empty, or last commit > 2 years before paper year
+  project_page_only  = only a project page exists, no code repo reachable
 
 Return nothing else. No markdown fences, no prose outside the JSON."""
+
+
+def _pick_project_url(candidate: CandidatePaper) -> str:
+    """Return the non-github code_url if any, otherwise empty."""
+    code_url = (getattr(candidate, "code_url", "") or "").strip()
+    if code_url and "github.com/" not in code_url.lower():
+        return code_url
+    return ""
 
 
 def build_repo_review_prompt(
     candidate: CandidatePaper, abstract_char_limit: int = 600
 ) -> Optional[str]:
-    """Return a repo-review prompt, or None if candidate lacks a GitHub URL.
+    """Return a repo-review prompt, or None if there is nothing to review.
 
-    Project pages / personal sites are not actionable for a repo review,
-    so we require github.com specifically.
+    The prompt is emitted whenever ANY of these is present:
+      - `code_url` (github or project page)
+      - `paper_github_urls` mined from the paper source (Stage 5.5.a)
+
+    This is deliberately looser than the previous github-only constraint,
+    because 3DGS / CV papers frequently publish only a project page in the
+    accepted list; the real github repo is mined from the paper body or
+    the project page itself by the reviewing agent.
     """
     code_url = (getattr(candidate, "code_url", "") or "").strip()
-    if not code_url:
-        return None
-    if "github.com/" not in code_url.lower():
+    paper_github_urls = (getattr(candidate, "paper_github_urls", "") or "").strip()
+
+    if not code_url and not paper_github_urls:
         return None
 
     abstract = (candidate.abstract_raw or "")[:abstract_char_limit]
     if len(candidate.abstract_raw or "") > abstract_char_limit:
         abstract += " ..."
 
+    project_url = _pick_project_url(candidate)
+
     return REPO_REVIEW_PROMPT_TEMPLATE.format(
         title=candidate.title,
         venue=f"{candidate.venue} {candidate.year}",
         abstract_excerpt=abstract or "(no abstract available)",
-        code_url=code_url,
+        code_url=code_url or "(none)",
+        paper_github_urls=paper_github_urls or "(none found in paper body)",
+        project_url=project_url or "(none)",
         stars=getattr(candidate, "code_stars", "") or "?",
         last_commit=(getattr(candidate, "code_last_commit", "") or "?")[:10],
         primary_lang=getattr(candidate, "code_primary_language", "") or "?",
@@ -331,6 +357,14 @@ def apply_repo_review_results(
         review = review_results.get(cand.paper_id)
         if not review or not isinstance(review, dict):
             continue
+        resolved = (review.get("resolved_repo_url") or "").strip()
+        if resolved and hasattr(cand, "code_url"):
+            # Overwrite code_url when the review found a real repo that
+            # differs from the (often project-page) value passed in.
+            if "github.com/" in resolved.lower() and (
+                not cand.code_url or "github.com/" not in cand.code_url.lower()
+            ):
+                cand.code_url = resolved
         cq = review.get("code_quality", "") or ""
         if cq and hasattr(cand, "code_quality"):
             cand.code_quality = cq
