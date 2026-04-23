@@ -70,7 +70,6 @@ resmax/
 ├── literature_research/         # per-topic retrieval outputs (gitignored)
 ├── .secrets/                    # API credentials (gitignored, templates only)
 ├── .localconfig/                # machine-specific config (gitignored, templates only)
-├── PROFILE.example.md           # agent context template (copy to PROFILE.md)
 ├── SECRETS.md                   # authoritative guide to credentials & local config
 ├── requirements.txt             # aggregated Python dependencies
 ├── LICENSE                      # MIT
@@ -118,9 +117,6 @@ done
 
 # Fill in your API keys, SSH alias, conda env name, etc.
 $EDITOR .secrets/*.env .localconfig/*.env
-
-# (Optional) create your personal profile card
-cp PROFILE.example.md PROFILE.md
 ```
 
 See [`SECRETS.md`](./SECRETS.md) for the full field-by-field reference and the "missing-secret handling protocol" used by every skill.
@@ -161,8 +157,6 @@ All machine-specific or private values stay out of git via two sibling directori
 | `.localconfig/` | Machine runtime settings | `RESMAX_SSH_HOST`, `RESMAX_SSH_REMOTE_DIR`, `RESMAX_SSH_CONDA_ENV` |
 
 Loader implementation, hard-vs-soft requirements, and the agent's standard response to a missing secret are all described in [`SECRETS.md`](./SECRETS.md).
-
-`PROFILE.md` (copied from `PROFILE.example.md`) is a free-form context card describing your devices / research focus / preferences. No script reads it at runtime — it is purely a reference for agent chat.
 
 ---
 

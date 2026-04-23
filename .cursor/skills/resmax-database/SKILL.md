@@ -343,7 +343,7 @@ python3 $SKILL_ROOT/scripts/validate_database.py --out /tmp/validate.json
 ```bash
 source .secrets/openreview.env  # exports OPENREVIEW_USERNAME / OPENREVIEW_PASSWORD
 ```
-（见 `PROFILE.md` 的 Credentials 章节。`.secrets/` 目录已 gitignore。）
+（凭据清单与填写方式见仓库根目录 `SECRETS.md`；`.secrets/` 目录已 gitignore。）
 
 **硬性约束**：对调研阶段确认评审不公开的 venue（CVPR、ECCV、ICCV、AAAI、KDD、SIGGRAPH、ACMMM，以及所有期刊），不执行本子能力，仅在 CSV 中标记 `review_available=no`。
 

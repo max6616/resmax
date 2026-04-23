@@ -22,8 +22,6 @@ for f in .secrets/*.env.example .localconfig/*.env.example; do
 done
 
 # 2. Edit them and fill in your real values
-# 3. (Optional) create your personal PROFILE.md from the template
-cp PROFILE.example.md PROFILE.md
 ```
 
 Scripts auto-source every `.env` in both directories via the shared

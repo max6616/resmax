@@ -45,9 +45,6 @@ tmp/
 !.localconfig/README.md
 !.localconfig/*.env.example
 
-# === Personal profile (leaks real user/server names — see PROFILE.example.md) ===
-PROFILE.md
-
 # === Archive (optional: uncomment if you want to exclude) ===
 _archive_paperAnalysis/
 _archive_resmax/
