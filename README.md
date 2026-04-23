@@ -2,29 +2,29 @@
 
 > Autonomous literature infrastructure for AI research agents.
 >
-> 面向 AI agent 的自动化科研文献基础设施 — 将科研流程中可标准化的文献环节封装为可复用 skill，让 agent 高质量地完成论文库构建、语义索引与方向级调研。
+> Encapsulates the repeatable parts of the research literature workflow as reusable Cursor Skills so agents can build paper databases, semantic indexes, and direction-level surveys with consistent quality.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
 ![Python](https://img.shields.io/badge/python-3.10%2B-blue.svg)
 ![Platform](https://img.shields.io/badge/agent-Cursor%20Skills-black.svg)
 ![Status](https://img.shields.io/badge/status-active-brightgreen.svg)
 
+**Languages:** [English](README.md) · [中文](README_zh.md)
+
 <!--
-关于徽章 (badges) 的说明：
-徽章就是 README 顶部这些小标签图片，常见来源是 https://shields.io/ ，
-用 Markdown 图片语法 `![alt](url)` 嵌入，点击可以跳到对应链接（例如 License 徽章跳到 LICENSE 文件）。
-典型用途包括展示许可证、Python 版本、CI 状态、版本号等，属于"一眼看清项目元信息"的门面元素。
+Badges are small labels at the top of the README, often from https://shields.io/ ,
+embedded with Markdown image syntax. Typical uses: license, Python version, CI status.
 -->
 
 ---
 
 ## Highlights
 
-- **三 skill 协同、文件系统解耦** — `resmax-database` / `resmax-embedding` / `resmax-survey` 彼此通过 CSV 与 `.npz` 缓存交换数据，无运行时依赖，可独立替换。
-- **AI 顶会/顶刊覆盖** — 基于 OpenReview / OpenAlex / Semantic Scholar 等多源抓取 accepted list，自动补全摘要、评审、开源信息、录用等级。
-- **双路检索 + LLM 评分** — 关键词检索 ⊕ Qwen3-Embedding-8B 语义检索，合并去重后由 subagent 逐篇评分，主 agent 再复核。
-- **增量友好 + 可验证** — 每个阶段输出稳定文件，`validate_database.py` 作为数据库可用性的单一事实源。
-- **凭据零入库** — 所有 API key / 机器相关配置通过 `.secrets/` 与 `.localconfig/` 管理，clone 即可跑通模板流程。
+- **Three skills, filesystem-decoupled** — `resmax-database`, `resmax-embedding`, and `resmax-survey` exchange data via CSV and `.npz` caches only; no runtime coupling, so each stage can be swapped independently.
+- **Top AI venues** — Multi-source accepted-list ingestion (OpenReview / OpenAlex / Semantic Scholar, etc.) with automatic enrichment: abstracts, reviews, open-source signals, acceptance tier.
+- **Dual retrieval + LLM scoring** — Keyword search combined with Qwen3-Embedding-8B semantic search; merged and deduplicated, then per-paper scoring by a subagent and a final review pass by the main agent.
+- **Incremental-friendly and verifiable** — Stable artifacts per stage; `validate_database.py` is the single source of truth for database health.
+- **No secrets in the repo** — API keys and machine-specific settings live under `.secrets/` and `.localconfig/`; clone the repo and follow templates to run.
 
 ---
 
@@ -73,7 +73,8 @@ resmax/
 ├── SECRETS.md                   # authoritative guide to credentials & local config
 ├── requirements.txt             # aggregated Python dependencies
 ├── LICENSE                      # MIT
-└── README.md
+├── README.md                    # English (default on GitHub)
+└── README_zh.md                 # Chinese
 ```
 
 > `paper_database/` and `literature_research/` are gitignored. Inside `.secrets/` and `.localconfig/` only `*.env.example` and `README.md` are tracked.
@@ -86,7 +87,7 @@ resmax/
 |-----------|-----------------|---------------|
 | Python | 3.10+ | all skills |
 | [Cursor](https://cursor.com/) IDE or CLI | with Agent Skills support | driving every workflow in this repo |
-| GPU server (optional) | CUDA + `torch` + `transformers` + Qwen3-Embedding-8B | building the embedding cache; local query encode when the laptop is memory-starved |
+| GPU server (optional) | CUDA + `torch` + `transformers` + Qwen3-Embedding-8B | building the embedding cache; local query encoding when the machine is memory-starved |
 | External API keys | OpenReview / GitHub / OpenAlex / Semantic Scholar / SerpAPI | `resmax-database` enrichment (mostly soft requirements — scripts degrade gracefully when missing) |
 
 Per-skill Python dependencies are aggregated in `requirements.txt` at the repo root.
@@ -125,11 +126,11 @@ See [`SECRETS.md`](./SECRETS.md) for the full field-by-field reference and the "
 
 The three skills are invoked through Cursor Agent via natural-language triggers:
 
-| Goal | Trigger (examples) | Output |
-|------|-------------------|--------|
-| Build or update the base literature index | "更新 accepted" / "build literature base" / "全量重建" | `paper_database/accepted_index.csv` |
-| Build or refresh the embedding cache | "build embedding" / "更新 embedding" | `paper_database/embedding_cache/*.npz` |
-| Run a topic survey | "检索文献 \<topic\>" / "文献调研 \<topic\>" | `literature_research/<topic>/` |
+| Goal | Example triggers | Output |
+|------|------------------|--------|
+| Build or update the base literature index | "update accepted list" / "build literature base" / "full rebuild" | `paper_database/accepted_index.csv` |
+| Build or refresh the embedding cache | "build embedding" / "refresh embedding cache" | `paper_database/embedding_cache/*.npz` |
+| Run a topic survey | "literature survey \<topic\>" / "retrieve papers for \<topic\>" | `literature_research/<topic>/` |
 
 The agent will read the matching `SKILL.md` and execute the stages in order. When a required secret is missing, it halts and asks you for the value as described in `SECRETS.md`.
 
