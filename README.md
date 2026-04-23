@@ -1,7 +1,7 @@
 # resmax
 
 <p align="center">
-  <img src="./assets/icon.png" alt="resmax" width="256" />
+  <img src="./assets/icon.jpeg" alt="resmax" width="256" />
 </p>
 
 > Autonomous literature infrastructure for AI research agents.
