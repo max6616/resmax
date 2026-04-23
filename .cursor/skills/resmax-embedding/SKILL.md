@@ -36,21 +36,50 @@ SKILL_ROOT=.cursor/skills/resmax-embedding
 
 ## 服务器参数（硬性必填）
 
-执行本 skill 前，主 agent 必须确认以下三个参数。如果用户未在指令中提供，主 agent 必须先询问用户，禁止猜测或使用默认值。
+本 skill 从 `.localconfig/server.env` 读取所有远程执行参数，**不接受代码中
+写死的默认值**。首次使用前，主 agent 必须确认这些变量已填，否则 SSH 调用
+会抛 `[MISSING_SECRET]` 错误并终止。详细填写方式见 `.localconfig/README.md`
+及仓库根目录 `SECRETS.md`。
 
-| 参数 | 说明 | 示例 |
-|------|------|------|
-| SSH 连接方式 | 服务器的 SSH 地址或别名 | `ssh 5090`、`ssh user@192.168.1.100` |
-| Conda 环境名 | 服务器上包含 torch/transformers/numpy 的 conda 环境 | `llm` |
-| 执行目录 | 服务器上存放脚本和缓存的工作目录 | `~/resmax_embedding_build` |
+| 环境变量 | 说明 | 示例 | 必填 |
+|----------|------|------|------|
+| `RESMAX_SSH_HOST` | 服务器的 SSH 地址或 `~/.ssh/config` 别名 | `5090` / `user@192.168.1.100` | **是** |
+| `RESMAX_SSH_REMOTE_DIR` | 服务器上存放脚本和缓存的工作目录 | `~/resmax_embedding_build` | 否（默认同示例） |
+| `RESMAX_SSH_REMOTE_SCRIPT` | encode_query.py 的远程绝对/~ 路径 | `~/resmax_embedding_build/scripts/encode_query.py` | 否 |
+| `RESMAX_SSH_CONDA_ENV` | 含 torch/transformers/numpy 的 conda env 名 | `llm` | 否（默认 `llm`） |
+| `RESMAX_SSH_CONDA_INIT` | conda.sh 的远程路径（miniconda3 或 miniforge3） | `~/miniconda3/etc/profile.d/conda.sh` | 否 |
 
-主 agent 在执行前需要：
-1. 将本地脚本和数据同步到服务器执行目录
-2. 所有远程命令使用以下模板：
+### 信息补充指引（首次使用或缺参数时的标准流程）
+
+主 agent 在调用本 skill 时，若脚本 stderr 出现：
+
+```
+[MISSING_SECRET] {"missing_var": "RESMAX_SSH_HOST", ..., "env_file": ".localconfig/server.env", ...}
+```
+
+必须：
+
+1. **立即终止当前 stage**，禁止猜测别名或复用示例值（如 `5090`）。
+2. 向用户说明：本 skill 需要 SSH 到 GPU 服务器编码 embedding，请提供上表
+   中的 `RESMAX_SSH_HOST`（以及其它未填项），并告知用户 `.localconfig/`
+   已 gitignore，不会被提交。
+3. 把用户答复追加到 `.localconfig/server.env`（不存在则从
+   `.localconfig/server.env.example` 拷贝），`export VAR='...'` 格式。
+4. 重新执行原命令；`secrets_loader` 会在下一次 import 时自动加载。
+
+主 agent 在执行前还需要：
+1. 将本地脚本和数据同步到 `$RESMAX_SSH_REMOTE_DIR`
+2. 所有远程命令使用以下模板（从配置展开，不要硬编码）：
 
 ```bash
-ssh <server> "source ~/miniforge3/etc/profile.d/conda.sh && conda activate <env> && cd <dir> && HF_HUB_OFFLINE=1 <command>"
+ssh $RESMAX_SSH_HOST \
+  "source $RESMAX_SSH_CONDA_INIT && conda activate $RESMAX_SSH_CONDA_ENV && \
+   cd $RESMAX_SSH_REMOTE_DIR && HF_HUB_OFFLINE=1 <command>"
 ```
+
+**conda 初始化路径**：默认 `~/miniconda3/etc/profile.d/conda.sh`。若服务器
+装的是 miniforge3，把 `RESMAX_SSH_CONDA_INIT` 改成
+`~/miniforge3/etc/profile.d/conda.sh` 即可，无须改动任何代码。
 
 **HF_HUB_OFFLINE=1**：embedding 模型已预缓存在服务器上，所有命令必须设置此环境变量，禁止联网访问 HuggingFace Hub。
 
@@ -72,22 +101,27 @@ ssh <server> "source ~/miniforge3/etc/profile.d/conda.sh && conda activate <env>
 3. 选择空闲 GPU（显存占用 < 10%），通过 `--gpus` 参数指定
 
 ```bash
-ssh <server> nvidia-smi
+# Load server params from .localconfig/server.env (agent may also do this
+# programmatically via secrets_loader; the shell variant is shown for
+# manual debugging).
+source .localconfig/server.env
+
+ssh "$RESMAX_SSH_HOST" nvidia-smi
 
 # 同步脚本和数据
-rsync -avz $SKILL_ROOT/scripts/ <server>:<dir>/scripts/
-rsync -avz $SKILL_ROOT/config/ <server>:<dir>/config/
-rsync -avz paper_database/accepted_index.csv <server>:<dir>/accepted_index.csv
+rsync -avz $SKILL_ROOT/scripts/ "$RESMAX_SSH_HOST:$RESMAX_SSH_REMOTE_DIR/scripts/"
+rsync -avz $SKILL_ROOT/config/  "$RESMAX_SSH_HOST:$RESMAX_SSH_REMOTE_DIR/config/"
+rsync -avz paper_database/accepted_index.csv "$RESMAX_SSH_HOST:$RESMAX_SSH_REMOTE_DIR/accepted_index.csv"
 
 # 构建缓存
-ssh <server> "source ~/miniforge3/etc/profile.d/conda.sh && conda activate <env> && cd <dir> && \
-  HF_HUB_OFFLINE=1 python3 scripts/build_cache_multigpu.py \
+ssh "$RESMAX_SSH_HOST" "source $RESMAX_SSH_CONDA_INIT && conda activate $RESMAX_SSH_CONDA_ENV && \
+  cd $RESMAX_SSH_REMOTE_DIR && HF_HUB_OFFLINE=1 python3 scripts/build_cache_multigpu.py \
   --accepted accepted_index.csv \
   --out .embedding_cache/qwen3_8b.npz \
   --gpus 0,1,2,3"
 
 # 同步缓存回本地
-rsync -avz <server>:<dir>/.embedding_cache/qwen3_8b.npz paper_database/embedding_cache/qwen3_8b.npz
+rsync -avz "$RESMAX_SSH_HOST:$RESMAX_SSH_REMOTE_DIR/.embedding_cache/qwen3_8b.npz" paper_database/embedding_cache/qwen3_8b.npz
 ```
 
 | 参数 | 必填 | 说明 | 默认值 |
@@ -128,28 +162,23 @@ rsync -avz <server>:<dir>/.embedding_cache/qwen3_8b.npz paper_database/embedding
 [main] cache is up-to-date, nothing to encode.
 ```
 
-### 2. 增量更新与校验（embedding_cache.py）
+**增量 / 校验 / 差异** 由 `build_cache_multigpu.py` 自己做（见上方增量逻辑说明），以及 `resmax-database/scripts/validate_database.py` 的 `embedding` 节（paper_id 重叠率、维度、NaN 等）。本 skill 不再暴露独立的 `embedding_cache.py` 库 API。
 
-提供缓存的增量更新和完整性校验功能，可作为库导入使用。
+### 2. 查询编码（encode_query.py）
 
-主要函数：
-- `incremental_update(csv_path, cache_path)` — 对比 CSV 与缓存，仅编码新增论文并合并
-- `verify_cache(cache_path)` — 校验缓存完整性（NaN/Inf/范数/重复检测）
-- `diff_cache_vs_index(csv_path, cache_path)` — 返回缓存与索引的差异统计
-
-### 3. 查询编码（encode_query.py）
-
-将单条查询文本编码为 embedding 向量，输出 JSON 到 stdout。设计为在 GPU 服务器上运行，resmax-survey 通过 SSH 远程调用。
+将单条查询文本编码为 embedding 向量，输出 JSON 到 stdout。设计为在 GPU 服务器上运行，`resmax-survey` 通过 SSH 远程调用。
 
 ```bash
-ssh <server> "source ~/miniforge3/etc/profile.d/conda.sh && conda activate <env> && cd <dir> && \
-  HF_HUB_OFFLINE=1 python3 scripts/encode_query.py --query 'your research topic'"
+source .localconfig/server.env
+ssh "$RESMAX_SSH_HOST" "source $RESMAX_SSH_CONDA_INIT && conda activate $RESMAX_SSH_CONDA_ENV && \
+  HF_HUB_OFFLINE=1 python3 $RESMAX_SSH_REMOTE_SCRIPT --query 'your research topic'"
 ```
 
 | 参数 | 必填 | 说明 |
 |------|------|------|
-| `--query` | 是 | 查询文本 |
+| `--query` | 是（或 positional） | 查询文本。可通过 `--query <text>` 或第一个 positional 参数提供 |
 | `--model` | 否 | 模型名（默认 `Qwen/Qwen3-Embedding-8B`） |
+| `--device` | 否 | 设备（默认 `auto`，按 nvidia-smi 选择空闲 GPU） |
 | `--dim` | 否 | 截断维度（默认 0，全维度） |
 
 ## 输出

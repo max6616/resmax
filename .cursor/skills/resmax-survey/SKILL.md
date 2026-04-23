@@ -38,6 +38,24 @@ SKILL_ROOT=.cursor/skills/resmax-survey
 - `paper_database/embedding_cache/qwen3_8b.npz` 已存在（由 resmax-embedding 产出）
 - Python 依赖：`pip install -r $SKILL_ROOT/scripts/requirements.txt`，其中 Stage 5.5.a 需要 `arxiv-to-prompt`（TeX）、`pymupdf`（PDF 文本层）、`requests`（下载）
 - Stage 5.5.a 的 MinerU fallback 需要 `user-mineru` MCP 已启用（仅在 PDF 文本层也失败时才需要）
+- 若本机内存不足以本地 encode query（Qwen3-Embedding-8B），`.localconfig/server.env` 需配好 `RESMAX_SSH_HOST` 等变量，脚本会自动走 SSH 远程编码。变量缺失时脚本抛出 `[MISSING_SECRET]`，见下方「信息补充指引」。
+
+## 信息补充指引（缺少 SSH 配置或 API 凭据时）
+
+本 skill 通过 `.cursor/skills/_shared/secrets_loader.py` 自动加载
+`.secrets/*.env` 与 `.localconfig/*.env`。如果某个硬性必填变量未设置，
+脚本会以 stderr 输出 `[MISSING_SECRET] {json}` 并非零退出。**主 agent 必须
+立即终止当前 stage**，解析 JSON 中的 `missing_var` / `env_file` / `purpose`，
+向用户询问取值，并把 `export VAR='...'` 追加到指定文件，然后重跑脚本。
+
+本 skill 可能触发的 missing secret：
+
+| missing_var | env_file | 何时触发 | 可降级方案 |
+|-------------|----------|---------|------------|
+| `RESMAX_SSH_HOST` | `.localconfig/server.env` | 本机无法本地 encode（内存不足 / 无 torch）且需要 embedding 检索 | 无 — 本地 encode 或远程 SSH 必须二选一 |
+| `RESMAX_CONTACT_EMAIL` | `.secrets/contact.env` | 走 Unpaywall / OpenAlex 解析 PDF | 否（soft），自动回落到 `resmax@example.com` |
+
+完整协议与模板路径见仓库根 `SECRETS.md`。
 
 ## 流程
 
@@ -58,20 +76,16 @@ SKILL_ROOT=.cursor/skills/resmax-survey
 
 ### Stage 0：数据库完整性预检（硬性，必须首先执行）
 
-运行预检脚本验证基础文献库的完整性。如果预检失败（exit code 1），必须停止后续流程，将报告中的问题反馈给用户，建议先用 `resmax-database`（CSV 问题）或 `resmax-embedding`（缓存问题）修复。
+运行 `resmax-database` 的 `validate_database.py`，它是"数据库是否可用"的**单一事实源**，覆盖 CSV schema、覆盖率、embedding 对齐、registry 一致性、评审 JSON 完整性五个维度。
 
 ```bash
-python3 $SKILL_ROOT/scripts/preflight_check.py \
+python3 .cursor/skills/resmax-database/scripts/validate_database.py \
   --csv paper_database/accepted_index.csv \
-  --cache paper_database/embedding_cache/qwen3_8b.npz
+  --cache paper_database/embedding_cache/qwen3_8b.npz \
+  --out /tmp/validate.json
 ```
 
-脚本输出 JSON 报告，包含：
-- `csv.status`：CSV 检查结果（会议覆盖、标题完整性、摘要覆盖率、paper_id 唯一性）
-- `embedding.status`：embedding 缓存检查结果（文件存在性、与 CSV 的 paper_id 对齐度）
-- `overall`：`PASS` 或 `FAIL`
-
-`overall=FAIL` 时禁止继续执行 Stage 1-7。
+**硬性门槛**：退出码 0 且 JSON 报告 `overall=PASS` 时才可进入 Stage 1。`overall=FAIL` 时阅读 `coverage.hard_violations` 和 `embedding` 字段的提示，联系 `resmax-database`（CSV 问题）或 `resmax-embedding`（缓存问题）修复。
 
 ### Stages 1-4：脚本自动执行
 
@@ -229,12 +243,18 @@ for pid, p in prompts.items():
 candidates = load_research_index(out_dir / 'research_index.csv')
 apply_repo_review_results(candidates, reviews)
 write_research_index(out_dir / 'research_index.csv', candidates)
+
+# 重新跑一遍 stage5_5_deepcheck.py（幂等），让它自动：
+# 1) 读取刚写回的 deepcheck_reviews.json；
+# 2) 用 apply_repo_review_results + write_deepcheck_results_md 生成最终 MD；
+# 3) 把 resolved_repo_url 的变化持久化到 research_index.csv。
 ```
 
 **关键设计点**：
 - prompt 不再硬性要求 `github.com/`——只要 `code_url` 或 `paper_github_urls` 有一个非空就会生成。这是为了覆盖 CV / 3DGS 社区常见的"只发项目页"模式。
 - agent 的职责是**从项目页追到真实 GitHub repo** 并回写 `resolved_repo_url`；本脚本的 `apply_repo_review_results` 会用 `resolved_repo_url` 覆盖原 `code_url`（当新 URL 含 `github.com` 而原值不含时）。
 - 三种"无法评审"的情况要闭环处理：`code_quality="project_page_only"`（有项目页无 repo）、`code_quality="dead"`（404 或陈旧）、`code_quality="unknown"`（连入口都没有，主 agent 在 apply 后手工标记）。
+- **Markdown 表格不要手搓**：`stage5_5_deepcheck.py` 每次运行都会调用 `write_deepcheck_results_md()` 自动渲染 `deepcheck_results.md`。如果 agent 在 5.5.b 之后改了 `deepcheck_reviews.json`，再跑一次 `stage5_5_deepcheck.py` 即可同步 MD 和 CSV。
 
 #### 5.5.c 论文正文签名提取（预留，未来阶段消费）
 
@@ -326,11 +346,11 @@ log.write(out_dir / 'filter_log.md')
 |------|------|
 | `research_index.csv` | 方向级 research index，含评分和开源深度检查字段 |
 | `scores_raw.json` | orchestrator 产出的原始评分（中间文件） |
-| `deepcheck_prompts.json` | Stage 5.5.b 的仓库评审 prompt（中间文件） |
-| `deepcheck_missing_source.json` | Stage 5.5.a 输出：TeX 和 PDF 文本层都失败的论文清单（主 agent 用 mineru 兜底或放弃） |
-| `deepcheck_missing_pdf.json` | Stage 5.5.a 输出：PDF 全 fallback 失败的论文，每条带 `category`（`no_oa_copy_found` / `fallback_failed` / `unknown`）和 `fallback_diagnostic`（OA API + Sci-Hub 完整证据链）。`no_oa_copy_found` 是终态不可重试 |
-| `deepcheck_reviews.json` | Stage 5.5.b 的 agent 原始 JSON 返回（可复核） |
-| `deepcheck_results.md` | Stage 5.5.b 人类可读的评审表格 |
+| `deepcheck_prompts.json` | Stage 5.5.b 的仓库评审 prompt（中间文件，由 `stage5_5_deepcheck.py` 生成） |
+| `deepcheck_missing_source.json` | Stage 5.5.a 输出：TeX 和 PDF 文本层都失败的论文清单。List[obj]，每条含 `paper_id`/`title`/`arxiv_id`/`pdf_url`/`paper_link`/`paper_dir`/`errors`。主 agent 用 MinerU 兜底或放弃 |
+| `deepcheck_missing_pdf.json` | Stage 5.5.a 输出：PDF 全 fallback 失败的论文。List[obj]，每条含 `paper_id`/`title`/`paper_dir`/`category`（`no_oa_copy_found` / `fallback_failed` / `unknown`）/`pdf_candidates_tried`/`attempt_errors`/`fallback_diagnostic`（OA API + Sci-Hub 完整证据链）/`hint`。`no_oa_copy_found` 是终态不可重试 |
+| `deepcheck_reviews.json` | Stage 5.5.b 的 agent 原始 JSON 返回（可复核）。Dict[paper_id, review_obj]，review_obj 字段见 `REPO_REVIEW_PROMPT_TEMPLATE` 的 OUTPUT 段 |
+| `deepcheck_results.md` | Stage 5.5.b 人类可读的评审表格。由 `stage5_5_deepcheck.py` 自动生成（调用 `openness_deepcheck.write_deepcheck_results_md()`）。`deepcheck_reviews.json` 存在时合并其内容，不存在时为每个 S 论文渲染 `unknown` 行并在 Notes 列说明原因（缺源 / PDF 终态缺失 / 无 repo 信号） |
 | `paper_sources/<paper_id>/{paper.pdf,paper.pdftxt,paper.md,paper.tex,arxiv_source.tar.gz,arxiv_source/}` | Stage 5.5.a 源文本缓存（per-paper 子目录；供 5.5.c 和后续 skill 共享） |
 | `literature_list.md` | 按评分排序的文献列表 |
 | `filter_log.md` | 可读筛选日志 |
@@ -390,7 +410,7 @@ log.write(out_dir / 'filter_log.md')
 在本方向上跑通 Stage 5.5 两轮后沉淀的关键结论（S 论文共 11 篇）：
 
 1. **accepted_index.csv 的 `arxiv_id` 覆盖不完整**：11 篇 S 论文中只有 3 篇原生带 arxiv_id；至少 2 篇（ICLR Real-time 4DGS、NeurIPS D-MiSo）在 arXiv 上实际存在但未被 resmax-database 关联。**后续 resmax-database 改进方向**：对 OpenReview / CVF open-access 源补做 arxiv ID 反查。
-2. **accepted_index.csv 的 `code_url` 大小写被抓取时 `.lower()` 了**：`IHe-KaiI.github.io` 被存成 `ihe-kaii.github.io`，而 GitHub Pages 路由对大小写敏感，直接打不开。**resmax-database 待修**：URL 抓取时保持原始大小写，不要做任何归一化。
+2. **accepted_index.csv 的 `code_url` 大小写失真（来源是上游数据源本身）**：`IHe-KaiI.github.io` 被存成 `ihe-kaii.github.io`，GitHub Pages 路由大小写敏感。**定位结果**：resmax-database 的 parser 没有做任何归一化，字段直接来自 virtual conference JSON（CVPR/NeurIPS/ICLR 虚拟会议平台）里作者提交时就已经小写的数据。这不是 skill bug，是上游数据质量问题。**应对**：Stage 5.5.a 从 TeX/pdftxt 源（字符保真）抽取的 `paper_github_urls` 优先于原始 `code_url`，apply_repo_review_results 会用 agent 的 `resolved_repo_url` 覆盖错误的 `code_url`。后续考虑：对未进入 deepcheck 的论文（B/C 论文）可在 database 层跑一轮"摘要正则抽取 URL 做交叉验证"作为补救。
 3. **CV 社区的 `code_url` 绝大多数指向 `*.github.io` 项目页而非 `github.com` repo**：11 篇 S 里 8 篇有 `code_url`，其中 0 篇是 `github.com`。因此 5.5.b 的 prompt 不能硬性要求 `github.com/`，必须允许 agent 从项目页追到真实 repo。
 4. **MinerU MD 在字符敏感抽取上不可信**（CTRL-D 典型案例）：MinerU 把项目页 URL 里的大写 `I` 识别成小写 `l`，输出 `IHe-Kail.github.io`（实为 `IHe-KaiI.github.io`）。这类字形 OCR 混淆只有 PDF 文本层（`/ToUnicode` CMap）能规避。**所以 5.5.a 升级为三层并行**：TeX + PDF 文本层 + MinerU MD，URL 并集按字符保真优先排序（TeX/pdftxt > MD），下游 agent 看到的第一个 URL 就是最可信的。
 5. **PDF 文本层 vs MinerU MD 的互补性**：PDF 文本层 char-faithful，适合抽 URL/email/bibkey；MinerU MD 结构清洁、段落 reflow，适合给 agent 做正文理解 prompt；都应该保留。arXiv TeX 是第三条独立路径，保留公式和 `\cite{}` 结构，**对 5.5.c 及之后的 baseline/dataset 提取最有价值**。
@@ -402,3 +422,16 @@ log.write(out_dir / 'filter_log.md')
     - `accepted_index.csv` 缺 `doi` 列。当前由 `resolve_oa_pdf_urls` 内部 title→DOI 反查兜底；若上游补齐可省去 OpenAlex 一次额外查询。
     - NeurIPS/ICLR/ICML 论文的 `openreview_forum_id` 普遍为空（应为 OpenReview 上就能抓到）。当前 `derive_pdf_candidates` 能在该字段存在时直接命中 OpenReview PDF；若上游补齐可为 31 篇"只有 venue 信息"的论文打开 Layer 0 直达通路，减少 Layer 1/2 的网络开销。
     - `code_url` 和 URL 字段全局 `.lower()` bug（见经验 2）。
+
+## Scene Graph Generation 方向执行经验（2026-04）
+
+第二次在独立方向上全流程跑通 resmax-survey（subagent 作为 skill 执行者，主 agent 做开发者监控），沉淀的通用问题与改进：
+
+1. **`deepcheck_results.md` 之前未被任何脚本生成（已修）**：SKILL.md 声明它存在，但只有 `4dgs_editing` 那次是人手写的。新加了 `openness_deepcheck.write_deepcheck_results_md()` 库函数，`stage5_5_deepcheck.py` 在每次跑完自动渲染，无论 `deepcheck_reviews.json` 是否已存在。
+2. **Stage 5.5.a `no_oa_copy_found` 终态在 SGG 方向仍高频出现**：7/64 篇（主要是 ACMMM / TPAMI / IJCV 的 2024 新论文），和 4DGS 方向一致。作者未 self-archive 就是真的拿不到，下游应当明确接受这个信号而非重试。
+3. **CV+ML 双领域覆盖验证**：SGG 方向从 CVPR/ECCV/ICCV（49 篇）+ ML 会议（NeurIPS/ICLR/ICML/AAAI 等）各召回了合理数量，双路（keyword 23 + embedding 23 + both 27）的互补性符合预期。
+4. **embedding SSH 调用的冷启动成本**：首次 encode_query 在 GPU 服务器（本地实测为 4×RTX 5090）上耗时 ~45 秒（加载 4-shard INT8 模型），默认 300 秒 timeout 充足。若需要重复调用可考虑常驻 encoder service（未来方向）。
+5. **stage5_5_deepcheck.py 幂等运行**：两次连续跑不会覆盖已有 reviews，但会：(a) 重新尝试 missing_pdf 的获取；(b) 重写 CSV / MD 使之对齐最新 `resolved_repo_url`。执行 5.5.b 的 Python 代码后"再跑一次脚本"是推荐的 closing step。
+6. **"S 膨胀"不是 skill bug**：本次方向 `scene graph generation` 跑出 S=64/73（88%）一度被误判为 scorer 过度慷慨。逐条审查每个 S 的 reason 后确认：scorer 实际判断准确，每篇都是 "Core XXX-SGG method" / "Essential baseline"。真正原因是 SGG 本身是一个**极度宽泛的伞领域**（方法/PSG/VidSGG/DSGG/3D-SGG/OV-SGG/4D-PSG/VRD 都算核心），关键词 + embedding 双路 top-100 召回在这种宽方向上确实大多数就是核心方法。**推论：下游使用者如果发现 S 比例过高，应优先**(a) 把研究方向描述具体化（如不是 "scene graph generation" 而是 "dynamic scene graph for video QA"），而非期望 scorer 做二次筛选；(b) keywords 同步收窄以减小召回池宽度。Scorer prompt 不需要改。
+7. **窄方向二次验证**：把方向具体化为 `Dynamic video scene graph generation and scene-graph-grounded visual question answering — covering temporal/video scene graph construction, spatio-temporal relation reasoning, and VQA driven by scene graphs`（keywords 同步收窄到 `dynamic scene graph / temporal scene graph generation / video scene graph / video scene graph generation / scene graph VQA / scene graph question answering / graph-based VQA / visual question answering`）后重跑，分布自然恢复健康：S=16/90 (17.8%)、A=19 (21%)、B=26 (29%)、C=29 (32%)，scorer prompt 未动。S 篇全部是 DSGG/VSGG/STSG/VQA-with-SG 的 core 方法，A 是 "在 VSGG 但缺 VQA 一腿"、B 是 "VQA 方向但没有 scene graph 元素"、C 是 "只擦到关键词几乎无关" —— 每级 reason 都分界清晰。**结论：direction 描述应由 keywords 展开成完整自然语言，既作为 embedding query 也作为 scorer 的核心语境，同时 keywords 要足够精准以收紧召回池。这是使用者层面的 playbook，不是 skill 需要改的地方。**
+8. **Stage 5.5.b Task 派发可能遭遇 "aborted / Client network socket disconnected"**：本次窄方向跑 11 个 repo review 时，负责跑 skill 的 subagent 派发到第 3-4 个 Task 后前端显示 Connection Error 并卡死（6+ 分钟无 event）。**应对策略**：主 agent 接管，把每个 prompt 在其末尾追加 "Write 到 /tmp/reviews/<slug>.json 并返回 DONE:<path>" 的指令，然后**同一条 message 里并行派发所有 Task（run_in_background=True）**，通过轮询文件系统判定完成。不依赖 Task 的返回 string，对前端瞬断鲁棒。这是 Stage 5.5.b 嵌套派发的通用 fallback。

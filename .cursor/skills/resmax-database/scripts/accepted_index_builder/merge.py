@@ -6,7 +6,10 @@ from pathlib import Path
 from .models import AcceptedPaperRecord
 from .normalize import normalize_authors, normalize_title, normalize_whitespace, slugify_short_title
 
-FIELDNAMES = [
+# Core fields defined on AcceptedPaperRecord; CSV may additionally contain
+# enrich-only columns (review_*, code_is_real, code_stars, has_pretrained_weights,
+# etc.) that we carry on AcceptedPaperRecord.extras untouched.
+CORE_FIELDNAMES = [
     "paper_id",
     "short_id",
     "venue",
@@ -43,15 +46,28 @@ FIELDNAMES = [
     "poster_position",
 ]
 
+# Deprecated alias kept for backwards compatibility; new code should use CORE_FIELDNAMES.
+FIELDNAMES = CORE_FIELDNAMES
+
 
 def merge_prefer_existing(base: AcceptedPaperRecord, incoming: AcceptedPaperRecord) -> AcceptedPaperRecord:
-    for field in FIELDNAMES:
+    for field in CORE_FIELDNAMES:
         if field in {"paper_id", "short_id"}:
             continue
         current = getattr(base, field)
         new_value = getattr(incoming, field)
         if (current is None or current == "") and new_value not in (None, ""):
             setattr(base, field, new_value)
+    # Merge extras: base wins on non-empty conflicts; incoming fills holes.
+    # Work on a fresh dict so we never mutate an alias shared with another record.
+    base_extras = dict(base.extras) if isinstance(base.extras, dict) else {}
+    inc_extras = incoming.extras if isinstance(incoming.extras, dict) else {}
+    for k, v in inc_extras.items():
+        if v in (None, ""):
+            continue
+        if not base_extras.get(k):
+            base_extras[k] = v
+    base.extras = base_extras
     return base
 
 
@@ -63,17 +79,23 @@ def load_existing_records(path: Path) -> list[AcceptedPaperRecord]:
     if not path.exists():
         return []
     records: list[AcceptedPaperRecord] = []
+    csv.field_size_limit(100 * 1024 * 1024)
     with path.open("r", encoding="utf-8", newline="") as f:
         reader = csv.DictReader(f)
         for row in reader:
             kwargs = {}
-            for field in FIELDNAMES:
-                val = row.get(field, "")
-                if field == "year":
-                    kwargs[field] = int(val or 0)
+            for fn in CORE_FIELDNAMES:
+                val = row.get(fn, "")
+                if fn == "year":
+                    kwargs[fn] = int(val or 0)
                 else:
-                    kwargs[field] = val or ""
-            records.append(AcceptedPaperRecord(**kwargs))
+                    kwargs[fn] = val or ""
+            extras = {
+                k: (v or "")
+                for k, v in row.items()
+                if k and k not in CORE_FIELDNAMES
+            }
+            records.append(AcceptedPaperRecord(**kwargs, extras=extras))
     return records
 
 
@@ -135,9 +157,23 @@ def merge_records(primary_records: list[AcceptedPaperRecord], auxiliary_records:
 
 def write_csv(path: Path, records: list[AcceptedPaperRecord]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
+
+    # Collect every extras key that appears on any record. We write them
+    # after the core fields in deterministic order so the header layout is
+    # stable across builds.
+    extra_keys: set[str] = set()
+    for r in records:
+        if isinstance(r.extras, dict):
+            extra_keys.update(k for k in r.extras.keys() if k)
+    ordered_extras = sorted(extra_keys)
+    fieldnames = CORE_FIELDNAMES + ordered_extras
+
     with path.open("w", encoding="utf-8", newline="") as f:
-        writer = csv.DictWriter(f, fieldnames=FIELDNAMES)
+        writer = csv.DictWriter(f, fieldnames=fieldnames, extrasaction="ignore")
         writer.writeheader()
         for record in records:
-            row = {field: getattr(record, field) for field in FIELDNAMES}
+            row = {fn: getattr(record, fn, "") for fn in CORE_FIELDNAMES}
+            extras = record.extras if isinstance(record.extras, dict) else {}
+            for fn in ordered_extras:
+                row[fn] = extras.get(fn, "")
             writer.writerow(row)

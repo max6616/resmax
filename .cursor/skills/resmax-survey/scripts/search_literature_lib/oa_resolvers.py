@@ -46,9 +46,15 @@ USER_AGENT = (
     "(KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
 )
 API_TIMEOUT = 15
-# Unpaywall explicitly requires a contact email; a placeholder works but
-# users should set RESMAX_UNPAYWALL_EMAIL in their environment.
-DEFAULT_EMAIL = os.environ.get("RESMAX_UNPAYWALL_EMAIL", "resmax-survey@example.com")
+# Unpaywall explicitly requires a contact email in the query string; a
+# generic placeholder works for a handful of calls but real usage should
+# set RESMAX_CONTACT_EMAIL via .secrets/contact.env so the polite-pool
+# routing kicks in. RESMAX_UNPAYWALL_EMAIL is accepted as a legacy alias.
+DEFAULT_EMAIL = (
+    os.environ.get("RESMAX_CONTACT_EMAIL")
+    or os.environ.get("RESMAX_UNPAYWALL_EMAIL")
+    or "resmax@example.com"
+)
 
 
 def _json_get(url: str, *, timeout: int = API_TIMEOUT) -> tuple[Optional[dict], int, str]:

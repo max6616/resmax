@@ -12,12 +12,20 @@ from __future__ import annotations
 
 import json
 import subprocess
+import sys
 import shlex
 from pathlib import Path
 
 import numpy as np
 
 from .models import CandidatePaper
+
+# Auto-load .secrets/*.env and .localconfig/*.env into os.environ.
+# File path: .cursor/skills/resmax-survey/scripts/search_literature_lib/embedding_filter.py
+# parents: [0]=search_literature_lib, [1]=scripts, [2]=resmax-survey, [3]=skills, [4]=.cursor
+_SHARED = Path(__file__).resolve().parents[3] / "_shared"
+sys.path.insert(0, str(_SHARED))
+from secrets_loader import MissingSecretError, get_secret, require_secret  # noqa: E402
 
 
 def load_embedding_cache(cache_path) -> tuple:
@@ -53,21 +61,54 @@ def _encode_query_local(
 
 def _encode_query_ssh(
     query: str,
-    ssh_host: str = "5090",
-    remote_script: str = "~/resmax_embedding_build/scripts/encode_query.py",
-    conda_env: str = "llm",
+    ssh_host: str = "",
+    remote_script: str = "",
+    conda_env: str = "",
     model_name: str = "Qwen/Qwen3-Embedding-8B",
-    device: str = "cuda:0",
+    device: str = "auto",
     dimension: int = 0,
-    timeout: int = 180,
+    # Qwen3-Embedding-8B INT8 first-load (4 shards) takes ~50s on a warm cache;
+    # cold HF download can push well past 3 min. Budget 5 min to be safe.
+    timeout: int = 300,
+    conda_init: str = "",
 ) -> np.ndarray:
+    # Empty args mean "read from .localconfig/server.env". RESMAX_SSH_HOST is
+    # hard-required: without it we can't even attempt the SSH fallback and
+    # should raise a MissingSecretError the Cursor agent will convert into
+    # an interactive prompt to the user (see SECRETS.md).
+    ssh_host = ssh_host or require_secret(
+        "RESMAX_SSH_HOST",
+        env_file=".localconfig/server.env",
+        purpose="SSH into the GPU server to encode the query embedding",
+    )
+    remote_script = remote_script or get_secret(
+        "RESMAX_SSH_REMOTE_SCRIPT",
+        env_file=".localconfig/server.env",
+        default="~/resmax_embedding_build/scripts/encode_query.py",
+    )
+    conda_env = conda_env or get_secret(
+        "RESMAX_SSH_CONDA_ENV",
+        env_file=".localconfig/server.env",
+        default="llm",
+    )
+    conda_init = conda_init or get_secret(
+        "RESMAX_SSH_CONDA_INIT",
+        env_file=".localconfig/server.env",
+        default="~/miniconda3/etc/profile.d/conda.sh",
+    )
     escaped_query = shlex.quote(query)
     dim_arg = f" --dim {dimension}" if dimension else ""
+    # HF_HUB_OFFLINE=1 is mandatory — the Qwen3-Embedding-8B weights are
+    # pre-cached on the server and reaching HuggingFace Hub from the server
+    # network can hang or 403. encode_query.py also sets this internally as
+    # a safety net; we set it here so the process never even tries online
+    # resolution during conda activation.
     cmd = (
         f"ssh {ssh_host} "
-        f"\"source ~/miniconda3/etc/profile.d/conda.sh && conda activate {conda_env} && "
-        f"export HF_ENDPOINT=https://hf-mirror.com && "
-        f"python {remote_script} {escaped_query} --model {model_name} --device {device}{dim_arg}\""
+        f"\"source {conda_init} && conda activate {conda_env} && "
+        f"HF_HUB_OFFLINE=1 "
+        f"python3 {remote_script} --query {escaped_query} "
+        f"--model {model_name} --device {device}{dim_arg}\""
     )
     print(f"[embedding-retrieval] SSH to {ssh_host} for query encoding...")
     result = subprocess.run(
@@ -98,9 +139,9 @@ def encode_query(
     dimension: int = 0,
     device: str = "cpu",
     instruction: str = "",
-    ssh_host: str = "5090",
-    ssh_remote_script: str = "~/resmax_embedding_build/scripts/encode_query.py",
-    ssh_conda_env: str = "llm",
+    ssh_host: str = "",
+    ssh_remote_script: str = "",
+    ssh_conda_env: str = "",
 ) -> np.ndarray:
     """Encode query, auto-selecting local or SSH."""
     text = (instruction + query) if instruction else query
@@ -122,7 +163,9 @@ def encode_query(
         remote_script=ssh_remote_script,
         conda_env=ssh_conda_env,
         model_name=model_name,
-        device="cuda:0",
+        # Use 'auto' so encode_query.py's nvidia-smi probe picks the first
+        # GPU with >= 20 GiB free. Avoids hanging on a busy cuda:0.
+        device="auto",
         dimension=dimension,
     )
 
@@ -160,7 +203,7 @@ def embedding_retrieve(
     top_k: int = 50,
     device: str = "cpu",
     instruction: str = "",
-    ssh_host: str = "5090",
+    ssh_host: str = "",
 ) -> list[tuple[CandidatePaper, float]]:
     """Retrieve top-K papers by embedding similarity.
 

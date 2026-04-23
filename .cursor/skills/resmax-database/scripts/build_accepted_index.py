@@ -10,6 +10,11 @@ PACKAGE_DIR = SCRIPT_DIR / "accepted_index_builder"
 if str(SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPT_DIR))
 
+# Auto-load .secrets/*.env so OPENALEX_API_KEY etc. are available to fetchers.
+_SHARED = Path(__file__).resolve().parents[2] / "_shared"
+sys.path.insert(0, str(_SHARED))
+import secrets_loader  # noqa: E402,F401
+
 from accepted_index_builder.fetchers import (
     fetch_aaai_ojs_all_issues,
     fetch_acmmm_vue_accepted_chunk,

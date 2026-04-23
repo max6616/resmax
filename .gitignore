@@ -32,6 +32,22 @@ tmp/
 # === Claude / Cursor local config ===
 .claude/settings.local.json
 
+# === Secrets (real credentials) ===
+# Everything in .secrets/ is ignored EXCEPT templates and the README so
+# new clones know what to populate.
+.secrets/*
+!.secrets/README.md
+!.secrets/*.env.example
+
+# === Local machine config (SSH hosts, paths, conda env names) ===
+# Not credentials, but machine-specific; ship only the templates.
+.localconfig/*
+!.localconfig/README.md
+!.localconfig/*.env.example
+
+# === Personal profile (leaks real user/server names — see PROFILE.example.md) ===
+PROFILE.md
+
 # === Archive (optional: uncomment if you want to exclude) ===
 _archive_paperAnalysis/
 _archive_resmax/

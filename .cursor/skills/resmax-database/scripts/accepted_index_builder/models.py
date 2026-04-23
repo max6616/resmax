@@ -61,6 +61,11 @@ class AcceptedPaperRecord:
     starttime: str = ""
     endtime: str = ""
     poster_position: str = ""
+    # Extras hold any CSV columns not defined above (e.g. review_*, code_is_real,
+    # code_stars, has_pretrained_weights, has_dataset, and future enrich fields).
+    # They are preserved across build/merge cycles so downstream enrich output
+    # is never lost by a rebuild.
+    extras: dict = field(default_factory=dict)
 
 
 @dataclass

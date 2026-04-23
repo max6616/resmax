@@ -39,6 +39,11 @@ from typing import Optional
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
+# Auto-load .secrets/*.env so GITHUB_TOKEN is picked up from .secrets/github.env.
+_SHARED = Path(__file__).resolve().parents[2] / "_shared"
+sys.path.insert(0, str(_SHARED))
+import secrets_loader  # noqa: E402,F401  (import triggers auto-load)
+
 
 GITHUB_API = "https://api.github.com"
 CHECKPOINT_INTERVAL = 100

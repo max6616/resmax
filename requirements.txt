@@ -1,0 +1,22 @@
+# resmax — runtime dependencies
+#
+# The project is split into three skills; their third-party dependencies are
+# grouped below. Most scripts in resmax-database rely only on the Python
+# standard library (urllib / csv / json / argparse), so installing everything
+# here is enough to run the full pipeline end-to-end.
+
+# --- Core ---------------------------------------------------------------
+numpy>=1.24.0                # resmax-embedding, resmax-survey (vector ops)
+
+# --- GPU embedding (resmax-embedding + local query encode) --------------
+# Skip this group if you only use the remote SSH encode path and never
+# build the embedding cache on the current machine.
+torch>=2.0.0
+transformers>=4.40.0
+bitsandbytes>=0.43.0         # 4-bit quantization via BitsAndBytesConfig
+
+# --- resmax-survey Stage 5.5 (paper source fetch) -----------------------
+requests>=2.31.0             # PDF / arXiv tarball download
+pymupdf>=1.24.0              # PDF text-layer extraction
+arxiv-to-prompt>=0.13.0      # arXiv TeX source -> plain text
+psutil>=5.9.0                # memory / GPU memory pre-flight checks

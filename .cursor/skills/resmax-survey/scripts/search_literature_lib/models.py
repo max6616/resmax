@@ -66,9 +66,9 @@ class CandidatePaper:
     has_dataset: str = ""
 
     # --- openness deepcheck (populated in Stage 3.5) ---
-    code_quality: str = ""              # full / partial / skeleton / dead (agent verdict)
-    hf_models: str = ""                  # comma-separated HF model IDs
-    hf_datasets: str = ""                # comma-separated HF dataset IDs
+    code_quality: str = ""              # full / partial / skeleton / dead / project_page_only / unknown (agent verdict)
+    hf_models: str = ""                  # ';'-separated HuggingFace model IDs
+    hf_datasets: str = ""                # ';'-separated HuggingFace dataset IDs
     reproduction_readiness: int = 0     # 0-5 integer from agent review
 
     # --- paper-source cache (Stage 5.5.a; feeds 5.5.b and future stages) ---

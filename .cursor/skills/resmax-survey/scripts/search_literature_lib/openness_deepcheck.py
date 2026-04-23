@@ -334,6 +334,87 @@ def enrich_openness_deep(
     return results
 
 
+def write_deepcheck_results_md(
+    candidates: list[CandidatePaper],
+    review_results: dict[str, dict],
+    out_path,
+    *,
+    grade_filter: set[str] | None = None,
+    missing_pdf_ids: set[str] | None = None,
+    title: str = "Stage 5.5 Deep Check Results (S papers)",
+    note_char_limit: int = 220,
+) -> int:
+    """Render a human-readable Markdown table summarising repo reviews.
+
+    Writes one row per candidate selected by `grade_filter` (default {"S"}).
+    Papers without a review are still emitted with `unknown` columns and a
+    short Notes cell explaining why (no code link, missing PDF, ...).
+
+    Parameters
+    ----------
+    candidates : list of CandidatePaper (ordered)
+    review_results : dict[paper_id -> review json]
+    out_path : str | Path
+    grade_filter : optional set of final_score values to include (default {"S"})
+    missing_pdf_ids : optional set of paper_ids that terminated with no PDF
+                      copy (used to render a specific 'PDF unavailable' note)
+    title : markdown H1 title
+    note_char_limit : truncate notes to this many chars (adds '...' suffix)
+
+    Returns the number of rows written.
+    """
+    from datetime import datetime, timezone
+    from pathlib import Path
+
+    grade_set = grade_filter if grade_filter else {"S"}
+    missing_pdf_ids = missing_pdf_ids or set()
+    lines = [
+        f"# {title}",
+        "",
+        f"Generated: {datetime.now(timezone.utc).isoformat()}",
+        "",
+        "| Paper | Resolved Repo | Quality | Weights | Dataset | Readiness | Notes |",
+        "|-------|---------------|---------|---------|---------|-----------|-------|",
+    ]
+    rows_written = 0
+    for cand in candidates:
+        if cand.final_score not in grade_set:
+            continue
+        review = review_results.get(cand.paper_id) if isinstance(review_results, dict) else None
+        title_short = (cand.title or "")[:50]
+        if review and isinstance(review, dict):
+            resolved = (review.get("resolved_repo_url") or "").strip() or "—"
+            quality = review.get("code_quality", "") or "unknown"
+            weights = review.get("has_pretrained_weights_confirmed", "") or "unknown"
+            dataset = review.get("has_dataset_confirmed", "") or "unknown"
+            try:
+                readiness = int(review.get("reproduction_readiness", 0) or 0)
+            except (TypeError, ValueError):
+                readiness = 0
+            notes = (review.get("notes") or "").strip().replace("|", "/")
+        else:
+            resolved = "—"
+            quality = "unknown"
+            weights = "unknown"
+            dataset = "unknown"
+            readiness = 0
+            if cand.paper_id in missing_pdf_ids:
+                notes = "PDF unavailable (no_oa_copy_found terminal). See deepcheck_missing_pdf.json."
+            else:
+                notes = "No reviewable code/project link found in accepted_index or paper source."
+        if len(notes) > note_char_limit:
+            notes = notes[:note_char_limit].rstrip() + "..."
+        lines.append(
+            f"| {title_short} | {resolved} | {quality} | {weights} | {dataset} | "
+            f"{readiness}/5 | {notes} |"
+        )
+        rows_written += 1
+    out = Path(out_path)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return rows_written
+
+
 def apply_repo_review_results(
     candidates: list[CandidatePaper],
     review_results: dict[str, dict],

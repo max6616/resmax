@@ -47,6 +47,28 @@ except ImportError:
     print("[ERROR] aiohttp is required: pip install aiohttp", file=sys.stderr)
     sys.exit(1)
 
+# Load shared secrets / local-config (sources .secrets/*.env and .localconfig/*.env).
+# File path: .cursor/skills/resmax-database/scripts/enrich_abstracts_fallback.py
+# parents: [0]=scripts, [1]=resmax-database, [2]=skills
+_SHARED = Path(__file__).resolve().parents[2] / "_shared"
+sys.path.insert(0, str(_SHARED))
+from secrets_loader import get_secret  # noqa: E402
+
+
+def _contact_email() -> str:
+    """Contact email advertised in the User-Agent header to polite APIs.
+
+    OpenAlex and Crossref request a mailto in User-Agent to route callers
+    to their fast polite pool. Configured via RESMAX_CONTACT_EMAIL in
+    `.secrets/contact.env`; falls back to a generic placeholder so the
+    scripts still run end-to-end when the user has not set one.
+    """
+    return get_secret(
+        "RESMAX_CONTACT_EMAIL",
+        env_file=".secrets/contact.env",
+        default="resmax@example.com",
+    ) or "resmax@example.com"
+
 
 # ---------------------------------------------------------------------------
 # Title normalization (shared with meta_enrich.py)
@@ -243,7 +265,7 @@ async def _search_openalex(session: aiohttp.ClientSession, title: str) -> Option
         async with session.get(
             url,
             timeout=aiohttp.ClientTimeout(total=15),
-            headers={"User-Agent": "mailto:manson6616@gmail.com"},
+            headers={"User-Agent": f"mailto:{_contact_email()}"},
         ) as resp:
             if resp.status != 200:
                 return None
@@ -372,7 +394,7 @@ async def _search_crossref(session: aiohttp.ClientSession, title: str) -> Option
         async with session.get(
             url,
             timeout=aiohttp.ClientTimeout(total=20),
-            headers={"User-Agent": "mailto:manson6616@gmail.com"},
+            headers={"User-Agent": f"mailto:{_contact_email()}"},
         ) as resp:
             if resp.status != 200:
                 return None
@@ -888,7 +910,7 @@ async def run_enrichment(rows: list[dict], targets: list[int],
     start_time = time.time()
 
     async with aiohttp.ClientSession(
-        headers={"User-Agent": "resmax/1.0; mailto:manson6616@gmail.com"},
+        headers={"User-Agent": f"resmax/1.0; mailto:{_contact_email()}"},
         connector=aiohttp.TCPConnector(limit=concurrency + 10),
     ) as session:
 

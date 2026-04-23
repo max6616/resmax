@@ -65,6 +65,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     from search_literature_lib.openness_deepcheck import (
         passthrough_openness_fields, hf_lookup_by_arxiv, build_repo_review_prompt,
+        apply_repo_review_results, write_deepcheck_results_md,
     )
     from search_literature_lib.paper_source_fetch import (
         fetch_and_cache_source, derive_pdf_candidates, HAS_ARXIV_TO_PROMPT,
@@ -298,9 +299,39 @@ def main(argv: list[str] | None = None) -> int:
                       f"error={sh.get('error','') or '-'}")
             print(f"      hint: {m['hint']}")
 
+    # --- If Stage 5.5.b already ran, apply its reviews and regenerate the
+    # human-readable Markdown summary so every rerun produces a consistent
+    # `deepcheck_results.md` without the caller having to hand-roll it.
+    reviews_path = out_dir / "deepcheck_reviews.json"
+    reviews_data: dict[str, dict] = {}
+    if reviews_path.exists():
+        try:
+            reviews_data = json.loads(reviews_path.read_text(encoding="utf-8"))
+            if isinstance(reviews_data, dict):
+                applied = apply_repo_review_results(candidates, reviews_data)
+                print(f"[deepcheck] applied {applied} cached repo reviews from {reviews_path.name}")
+            else:
+                reviews_data = {}
+        except Exception as exc:
+            print(f"[deepcheck] WARN: cannot parse {reviews_path}: {exc}")
+            reviews_data = {}
+
     # --- Persist back to research_index.csv (full schema rewrite) ---
     write_research_index(index_path, candidates)
     print(f"[deepcheck] updated {index_path.name} with {len(RESEARCH_INDEX_FIELDS)} columns")
+
+    # --- Emit human-readable summary table. Include ALL selected papers
+    # (even those without a review) so the reader can see gaps at a glance.
+    missing_pdf_ids = {m.get("paper_id") for m in missing_pdf if m.get("paper_id")}
+    md_rows = write_deepcheck_results_md(
+        candidates,
+        reviews_data,
+        out_dir / "deepcheck_results.md",
+        grade_filter=grades,
+        missing_pdf_ids=missing_pdf_ids,
+        title=f"Stage 5.5 Deep Check Results ({'/'.join(sorted(grades))} papers)",
+    )
+    print(f"[deepcheck] wrote deepcheck_results.md ({md_rows} rows)")
 
     # Quick summary
     with_code = sum(1 for c in selected if c.code_url)

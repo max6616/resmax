@@ -6,11 +6,16 @@ build_accepted_index.py run (whether full rebuild, per-conference add, or
 incremental refresh). Every stage writes back to the same accepted_index.csv.
 
 Pipeline order (each stage may be skipped independently):
-  1. abstracts    — enrich_abstracts.py (arXiv / S2 / OpenReview fallback)
-  2. reviews      — enrich_reviews.py (OpenReview decision / scores)
-  3. code_urls    — enrich_code_urls.py (PWC + S2 + abstract regex)
-  4. code_quality — enrich_code_quality.py (lightweight /repos probe)
-  5. openness     — enrich_openness.py (abstract-based weights/dataset scan)
+  1. abstracts          — enrich_abstracts.py (S2 batch + arXiv batch)
+  2. abstracts_fallback — enrich_abstracts_fallback.py (CVF/AAAI/ACM/OpenAlex/CrossRef/S2/arXiv/SerpAPI)
+  3. acceptance_type    — enrich_acceptance_type.py (A-E venue mapping rules)
+  4. reviews            — enrich_reviews.py (OpenReview fetch or rehydrate)
+  5. code_urls          — enrich_code_urls.py (PWC + S2 + abstract regex)
+  6. code_quality       — enrich_code_quality.py (lightweight /repos probe)
+  7. openness           — enrich_openness.py (abstract-based weights/dataset scan)
+
+  The third-round abstract fallback (orchestrator subagent web-search) is
+  NOT handled here — it requires the main agent. See SKILL.md 子能力 2.
 
 Design rules:
   - The --filter flag propagates to every stage as a conf_year substring
@@ -42,12 +47,20 @@ import sys
 import time
 from pathlib import Path
 
+# Auto-load .secrets/*.env and .localconfig/*.env so every sub-stage sees
+# the same environment (OPENREVIEW_USERNAME/PASSWORD, GITHUB_TOKEN, etc.).
+_SHARED = Path(__file__).resolve().parents[2] / "_shared"
+sys.path.insert(0, str(_SHARED))
+import secrets_loader  # noqa: E402,F401
+
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 
 STAGES = [
     # (name, script_name, skip_flag, requires_env, extra_args_fn, supports_dry_run)
     ("abstracts", "enrich_abstracts.py", "skip_abstracts", None, None, True),
+    ("abstracts_fallback", "enrich_abstracts_fallback.py", "skip_abstracts_fallback", None, None, True),
+    ("acceptance_type", "enrich_acceptance_type.py", "skip_acceptance_type", None, None, True),
     ("reviews", "enrich_reviews.py", "skip_reviews", None, "_reviews_args", False),
     ("code_urls", "enrich_code_urls.py", "skip_code_urls", None, None, True),
     ("code_quality", "enrich_code_quality.py", "skip_code_quality", "GITHUB_TOKEN", "_quality_args", True),
@@ -56,11 +69,22 @@ STAGES = [
 
 
 def _reviews_args(args) -> list[str]:
-    return [
-        "--reviews-dir",
-        args.reviews_dir or str(Path(args.csv).parent / "reviews"),
-        "--skip-existing",
-    ]
+    """Decide which review mode to run based on available credentials.
+
+    Without OpenReview credentials we cannot fetch new reviews, but we still
+    want review_* columns populated: rehydrate from cached JSON files and
+    auto-mark no-public-review venues. This lets a fresh CSV rebuild recover
+    the review columns with zero network cost.
+
+    When credentials ARE provided, run the full fetch with --skip-existing so
+    already-cached papers are not refetched.
+    """
+    reviews_dir = args.reviews_dir or str(Path(args.csv).parent / "reviews")
+    has_creds = bool(os.environ.get("OPENREVIEW_USERNAME") and os.environ.get("OPENREVIEW_PASSWORD"))
+    if has_creds:
+        return ["--reviews-dir", reviews_dir, "--skip-existing"]
+    # Rehydrate mode: read cached JSONs, mark unsupported venues, no network.
+    return ["--reviews-dir", reviews_dir, "--rehydrate"]
 
 
 def _quality_args(args) -> list[str]:
@@ -160,6 +184,8 @@ def main():
         "Overrides skip flags.",
     )
     parser.add_argument("--skip-abstracts", action="store_true")
+    parser.add_argument("--skip-abstracts-fallback", action="store_true")
+    parser.add_argument("--skip-acceptance-type", action="store_true")
     parser.add_argument("--skip-reviews", action="store_true")
     parser.add_argument("--skip-code-urls", action="store_true")
     parser.add_argument("--skip-code-quality", action="store_true")

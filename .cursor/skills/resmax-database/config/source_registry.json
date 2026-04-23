@@ -438,7 +438,8 @@
         "parser_args": "2024"
       },
       "auxiliary_sources": [],
-      "notes": "OpenAlex API. ISSN=0920-5691. Springer IJCV. No abstract from OpenAlex; use fallback."
+      "notes": "OpenAlex API. ISSN=0920-5691. Springer IJCV. No abstract from OpenAlex; use fallback.",
+      "expected_abstract_coverage": 65.0
     },
     {
       "venue": "IJCV",
@@ -454,7 +455,8 @@
         "parser_args": "2025"
       },
       "auxiliary_sources": [],
-      "notes": "OpenAlex API. ISSN=0920-5691. Springer IJCV. No abstract from OpenAlex; use fallback."
+      "notes": "OpenAlex API. ISSN=0920-5691. Springer IJCV. No abstract from OpenAlex; use fallback.",
+      "expected_abstract_coverage": 65.0
     },
     {
       "venue": "IJCV",
@@ -470,7 +472,8 @@
         "parser_args": "2026"
       },
       "auxiliary_sources": [],
-      "notes": "OpenAlex API. ISSN=0920-5691. Springer IJCV. 2026 partial year."
+      "notes": "OpenAlex API. ISSN=0920-5691. Springer IJCV. 2026 partial year.",
+      "expected_abstract_coverage": 65.0
     },
     {
       "venue": "JMLR",
@@ -531,7 +534,8 @@
         "parser_args": "2024"
       },
       "auxiliary_sources": [],
-      "notes": "OpenAlex API. ISSN=0004-3702. Elsevier Artificial Intelligence."
+      "notes": "OpenAlex API. ISSN=0004-3702. Elsevier Artificial Intelligence.",
+      "expected_abstract_coverage": 65.0
     },
     {
       "venue": "AIJ",
@@ -547,7 +551,8 @@
         "parser_args": "2025"
       },
       "auxiliary_sources": [],
-      "notes": "OpenAlex API. ISSN=0004-3702. Elsevier Artificial Intelligence."
+      "notes": "OpenAlex API. ISSN=0004-3702. Elsevier Artificial Intelligence.",
+      "expected_abstract_coverage": 65.0
     },
     {
       "venue": "AIJ",
@@ -563,7 +568,8 @@
         "parser_args": "2026"
       },
       "auxiliary_sources": [],
-      "notes": "OpenAlex API. ISSN=0004-3702. Elsevier Artificial Intelligence. 2026 partial year."
+      "notes": "OpenAlex API. ISSN=0004-3702. Elsevier Artificial Intelligence. 2026 partial year.",
+      "expected_abstract_coverage": 65.0
     },
     {
       "venue": "TNNLS",

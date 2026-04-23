@@ -29,6 +29,11 @@ import urllib.request
 from pathlib import Path
 from typing import Optional
 
+# Auto-load .secrets/*.env so S2_API_KEY is picked up from .secrets/s2.env.
+_SHARED = Path(__file__).resolve().parents[2] / "_shared"
+sys.path.insert(0, str(_SHARED))
+import secrets_loader  # noqa: E402,F401
+
 
 PWC_PAPERS_URL = "https://paperswithcode.com/media/about/papers-with-abstracts.json.gz"
 PWC_LINKS_URL = "https://paperswithcode.com/media/about/links-between-papers-and-code.json.gz"

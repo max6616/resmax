@@ -31,6 +31,13 @@ import sys
 import time
 from pathlib import Path
 
+# Auto-load .secrets/*.env and .localconfig/*.env into os.environ.
+# File path: .cursor/skills/resmax-survey/scripts/search_literature.py
+# parents: [0]=scripts, [1]=resmax-survey, [2]=skills
+_SHARED = Path(__file__).resolve().parents[2] / "_shared"
+sys.path.insert(0, str(_SHARED))
+import secrets_loader  # noqa: E402,F401
+
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     p = argparse.ArgumentParser(
@@ -241,8 +248,8 @@ def main(argv: list[str] | None = None) -> int:
         for pid, entry in deep_results.items():
             for cand in candidates:
                 if cand.paper_id == pid:
-                    cand.hf_models = ",".join(entry.get("hf_models", []) or [])
-                    cand.hf_datasets = ",".join(entry.get("hf_datasets", []) or [])
+                    cand.hf_models = ";".join(entry.get("hf_models", []) or [])
+                    cand.hf_datasets = ";".join(entry.get("hf_datasets", []) or [])
                     break
 
         if dc_config.get("emit_repo_review_prompts", True):

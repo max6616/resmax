@@ -1,0 +1,34 @@
+# `.localconfig/` — machine-specific runtime configuration
+
+This directory holds **non-secret but per-machine** config: SSH hosts,
+remote paths, conda environment names, workspace-specific tuning. Kept
+separate from `.secrets/` so credentials and machine config have distinct
+lifecycles.
+
+Everything inside is gitignored except `README.md` and `*.env.example`
+templates.
+
+## Quick start for new clones
+
+```bash
+# 1. Copy every template
+for f in .localconfig/*.env.example; do
+  cp "$f" "${f%.example}"
+done
+
+# 2. Edit the .env files to point at your own GPU server, paths, conda env
+# 3. Skills load these automatically via _shared/secrets.py
+```
+
+## File index
+
+| File | Purpose | Consumed by |
+| --- | --- | --- |
+| `server.env` | Remote GPU server settings: SSH host, working directory, conda env | `resmax-embedding`, `resmax-survey` (embedding query encoding over SSH) |
+
+## Loader behaviour
+
+The same `.cursor/skills/_shared/secrets.py` loader reads these values.
+When a required variable is missing, the loader halts with a message
+that names which `.localconfig/*.env` file to populate. The agent then
+asks the user interactively and writes the value into the file.
