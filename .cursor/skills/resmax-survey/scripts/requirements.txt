@@ -1,0 +1,8 @@
+sentence-transformers>=2.7.0
+torch>=2.0.0
+numpy>=1.24.0
+psutil>=5.9.0
+# Stage 5.5.a — paper-source fetch (three-layer: arXiv TeX / PDF text-layer / MinerU MD)
+arxiv-to-prompt>=0.13.0
+pymupdf>=1.24.0          # PDF text-layer extraction for char-faithful URL mining
+requests>=2.31.0         # PDF + arxiv tarball download

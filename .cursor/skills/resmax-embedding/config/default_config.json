@@ -1,0 +1,10 @@
+{
+  "embedding": {
+    "model_name": "Qwen/Qwen3-Embedding-8B",
+    "dimension": 0,
+    "batch_size": 64,
+    "instruction_prefix": "Instruct: Retrieve academic papers relevant to the given research topic\nQuery: ",
+    "cache_dir": "paper_database/embedding_cache",
+    "cache_filename": "qwen3_8b.npz"
+  }
+}

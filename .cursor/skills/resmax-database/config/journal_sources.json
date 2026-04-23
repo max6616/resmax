@@ -1,0 +1,70 @@
+{
+  "journals": [
+    {
+      "venue": "TPAMI",
+      "full_name": "IEEE Transactions on Pattern Analysis and Machine Intelligence",
+      "publisher": "IEEE Computer Society",
+      "issn_print": "0162-8828",
+      "issn_online": "1939-3539",
+      "openalex_id": "S199944782",
+      "dblp_key": "journals/pami",
+      "data_source": "openalex_api",
+      "has_abstract": true,
+      "approx_papers_per_year": 700,
+      "notes": ""
+    },
+    {
+      "venue": "IJCV",
+      "full_name": "International Journal of Computer Vision",
+      "publisher": "Springer",
+      "issn_print": "0920-5691",
+      "issn_online": "1573-1405",
+      "openalex_id": "S25538012",
+      "dblp_key": "journals/ijcv",
+      "data_source": "openalex_api",
+      "has_abstract": false,
+      "approx_papers_per_year": 360,
+      "notes": "OpenAlex has no abstract for Springer journals; use enrich fallback."
+    },
+    {
+      "venue": "JMLR",
+      "full_name": "Journal of Machine Learning Research",
+      "publisher": "JMLR Inc.",
+      "issn_print": "1532-4435",
+      "issn_online": "1533-7928",
+      "openalex_id": "S118988714",
+      "dblp_key": "journals/jmlr",
+      "data_source": "jmlr_html",
+      "has_abstract": true,
+      "approx_papers_per_year": 300,
+      "volume_year_mapping": {"25": 2024, "26": 2025, "27": 2026},
+      "notes": "Open access. No DOI. OpenAlex data severely incomplete; use official site."
+    },
+    {
+      "venue": "AIJ",
+      "full_name": "Artificial Intelligence",
+      "publisher": "Elsevier",
+      "issn_print": "0004-3702",
+      "issn_online": "1872-7921",
+      "openalex_id": "S196139623",
+      "dblp_key": "journals/ai",
+      "data_source": "openalex_api",
+      "has_abstract": true,
+      "approx_papers_per_year": 130,
+      "notes": ""
+    },
+    {
+      "venue": "TNNLS",
+      "full_name": "IEEE Transactions on Neural Networks and Learning Systems",
+      "publisher": "IEEE Computational Intelligence Society",
+      "issn_print": "2162-237X",
+      "issn_online": "2162-2388",
+      "openalex_id": "S4210175523",
+      "dblp_key": "journals/tnn",
+      "data_source": "openalex_api",
+      "has_abstract": true,
+      "approx_papers_per_year": 850,
+      "notes": ""
+    }
+  ]
+}
