@@ -1,8 +1,8 @@
-<p align="center">
-  <img src="./assets/icon.png" alt="resmax" width="128" />
-</p>
-
 # resmax
+
+<p align="center">
+  <img src="./assets/icon.png" alt="resmax" width="256" />
+</p>
 
 > 面向 AI agent 的自动化科研文献基础设施。
 >

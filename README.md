@@ -1,8 +1,8 @@
-<p align="center">
-  <img src="./assets/LOGO.png" alt="ResearchFlow logo" width="280"/>
-</p>
-
 # resmax
+
+<p align="center">
+  <img src="./assets/icon.png" alt="resmax" width="256" />
+</p>
 
 > Autonomous literature infrastructure for AI research agents.
 >
