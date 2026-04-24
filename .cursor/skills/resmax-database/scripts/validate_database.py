@@ -49,6 +49,8 @@ csv.field_size_limit(100 * 1024 * 1024)
 # script has zero runtime dependencies on enrich_reviews.py.
 PUBLIC_REVIEW_VENUES = {"ICLR", "NeurIPS", "ICML"}
 
+NON_PEER_REVIEWED_VENUES = {"ArXiv_HiCite", "HF_DailyPapers", "Anthropic_Research"}
+
 
 def _load_csv(path: Path) -> tuple[list[str], list[dict]]:
     if not path.exists():
@@ -161,6 +163,7 @@ def check_coverage(rows: list[dict], reviews_dir: Path, registry_path: Path | No
 
         venue = group[0].get("venue", "") if group else ""
         is_public_review_venue = venue in PUBLIC_REVIEW_VENUES
+        is_non_peer_reviewed = venue in NON_PEER_REVIEWED_VENUES
         reviews_conf_dir = reviews_dir / cy
         reviews_dir_exists = reviews_conf_dir.exists() and any(reviews_conf_dir.iterdir()) if reviews_conf_dir.exists() else False
 
@@ -181,16 +184,20 @@ def check_coverage(rows: list[dict], reviews_dir: Path, registry_path: Path | No
         # Hard requirement H2: abstracts >= configured threshold (default 99%).
         # Registry can declare a lower expected value for venues with known
         # upstream data source limitations (e.g. Springer journals via OpenAlex).
-        expected_abs = thresholds.get(cy, {}).get("expected_abstract_coverage", 99.0)
+        # Non-peer-reviewed venues default to 80% (S2/HF may lack abstracts).
+        default_abs = 80.0 if is_non_peer_reviewed else 99.0
+        expected_abs = thresholds.get(cy, {}).get("expected_abstract_coverage", default_abs)
         stats["expected_abstract_coverage"] = expected_abs
         if stats["abstract_pct"] < expected_abs:
             hard_violations.append(
                 f"{cy}: abstract_pct {stats['abstract_pct']}% < {expected_abs}% (registry threshold)"
             )
-        # Hard requirement H3: acceptance_type 100% and no bare 'Accept'
+        # Hard requirement H3: acceptance_type 100% and no bare 'Accept'.
+        # Non-peer-reviewed venues use their own acceptance_type values
+        # (High-Impact Preprint, Community Selected) and skip bare-Accept check.
         if stats["acceptance_type_pct"] < 100.0:
             hard_violations.append(f"{cy}: acceptance_type_pct {stats['acceptance_type_pct']}% < 100%")
-        if at_accept > 0:
+        if at_accept > 0 and not is_non_peer_reviewed:
             hard_violations.append(
                 f"{cy}: {at_accept} rows have bare 'Accept' as acceptance_type"
             )

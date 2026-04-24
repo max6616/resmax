@@ -623,8 +623,8 @@ python3 $SKILL_ROOT/scripts/validate_database.py \
 | ID | 检查项 | 硬性阈值 |
 |---|---|---|
 | H1 | paper_id 唯一、title/venue/year 非空 | 100% |
-| H2 | 每个 conf_year 的 abstract_raw 覆盖率 | ≥ registry 中声明的 `expected_abstract_coverage`（默认 99%，AIJ/IJCV 因 Springer 摘要缺失声明为 65%） |
-| H3 | 每个 conf_year 的 acceptance_type 覆盖率 100% 且 0 行 bare `Accept` | = 100% |
+| H2 | 每个 conf_year 的 abstract_raw 覆盖率 | ≥ registry 中声明的 `expected_abstract_coverage`（默认 99%，AIJ/IJCV 65%，非同行评审 venue 80%） |
+| H3 | 每个 conf_year 的 acceptance_type 覆盖率 100% 且 0 行 bare `Accept`（非同行评审 venue 跳过 bare-Accept 检查） | = 100% |
 | H4 | 公开评审 venue 且 `reviews/<conf_year>/` 已有数据时，review_available 覆盖率 | ≥ 99% |
 | H5 | embedding cache 与 CSV paper_id 重叠率 | ≥ 95% |
 
@@ -773,6 +773,56 @@ CSV 的列按逻辑分为两层：
 | JMLR | — | jmlr_html | 2024-2026 | ~300 |
 | AIJ | S196139623 | openalex_api | 2024-2026 | ~130 |
 | TNNLS | S4210175523 | openalex_api | 2024-2026 | ~850 |
+
+**非同行评审信源**
+
+| Venue | 数据源 | Parser | 年份 | 筛选条件 |
+|-------|--------|--------|------|---------|
+| ArXiv_HiCite | S2 Bulk Search API | s2_bulk_papers | 2024-2026 | CS 领域, >=50 citations (2026: >=20) |
+| HF_DailyPapers | HuggingFace Daily Papers API | hf_daily_papers | 2024-2026 | >=30 upvotes (2026: >=15) |
+
+### Semantic Scholar 高引用预印本（ArXiv_HiCite）
+
+1. （可选）设置环境变量 `S2_API_KEY` 提升速率限制（无 key 时 100 req/5min）
+2. `source_registry.json` 中已注册 2024-2026 三个年份，`parser_args` 格式为 `year=YYYY,minCitationCount=auto`
+3. 运行 `build_accepted_index.py --conf-years ArXiv_HiCite_2025` 增量抓取
+4. 自动过滤：仅保留有 arXiv ID 的论文；已在同行评审 venue 中的论文在最终去重阶段移除
+
+**动态引用阈值**：`minCitationCount=auto` 时，阈值按论文年龄自动计算：`max(10, 100 × 月龄 / 24)`。含义是"2 年积累 100 引用"的论文值得入库。实际效果：
+- 2024 年论文（~28 月）：阈值 ≈ 116，入库 ~860 篇（中位数 172 引用）
+- 2025 年论文（~16 月）：阈值 ≈ 66，入库 ~435 篇（中位数 106 引用）
+- 2026 年论文（~4 月）：阈值 ≈ 16，入库 ~52 篇（中位数 24 引用）
+
+也可手动指定固定值：`minCitationCount=50`。
+
+### HuggingFace Daily Papers（HF_DailyPapers）
+
+1. 无需 API key，公开 API
+2. `source_registry.json` 中已注册 2024-2026 三个年份，`parser_args` 格式为 `year=YYYY,minUpvotes=N`
+3. 运行 `build_accepted_index.py --conf-years HF_DailyPapers_2025` 增量抓取
+4. 间接覆盖大部分头部 AI 公司技术报告（GPT/Claude/Gemini/Llama/DeepSeek 等报告发布后几乎 100% 会被提交到 HF Daily Papers）
+
+**HF API 特性**：
+- `skip` 分页参数不可用（API bug，返回相同结果），fetcher 改用 `date` 参数按天遍历
+- Python `urllib` 无法连接 huggingface.co（TLS 兼容性问题），fetcher 使用 `curl` 子进程作为 HTTP 客户端
+- `upvotes` 字段在 `paper.upvotes`（嵌套在 paper 对象内），不在外层 entry 上
+- 一年约 250-260 个活跃天，每天 ~2 秒，全年遍历约 10-15 分钟
+
+### Anthropic Research（Anthropic_Research）
+
+1. 无需 API key，从 sitemap.xml 获取全部研究文章 URL，逐页抓取
+2. `source_registry.json` 中已注册 2024-2026 三个年份，使用 `anthropic_sitemap_cached` kind
+3. 运行 `build_accepted_index.py --conf-years Anthropic_Research_2024,Anthropic_Research_2025,Anthropic_Research_2026`（建议三年一起跑，利用缓存机制只爬一次 sitemap）
+4. Tier 1 信源（S2 + HF）对 Anthropic 覆盖率仅 7.5%，必须单独爬取
+
+**缓存机制**：`anthropic_sitemap_cached` kind 在同一次 build 中只爬一次 sitemap（~109 页，约 6 分钟），后续年份从内存缓存按 year 过滤，0 秒完成。如果只跑单个年份，也可用 `anthropic_sitemap` kind（每次独立爬取）。
+
+**链接提取优先级**：`paper_link` 字段优先取 `transformer-circuits.pub` 完整论文链接，其次 `arxiv.org` 链接，最后 `anthropic.com` 博客页面。
+
+**已知限制**：
+- 作者信息：Anthropic 页面无结构化作者列表，当前统一填 "Anthropic"
+- arxiv_id 覆盖率约 47%（大量 interpretability 研究只发在 transformer-circuits.pub）
+- 摘要来自 og:description meta 标签，质量为博客摘要级别（非论文 abstract）
 
 ## 配置文件说明
 
@@ -950,3 +1000,22 @@ virtual conference JSON 的 `decision` 字段大小写极不统一（如 `Accept
 - 期刊论文无 oral/poster 区分
 - Parser 直接设置 `acceptance_type = "Journal Article"`
 - 无需额外补全
+
+**F. 非同行评审信源（ArXiv_HiCite、HF_DailyPapers、Anthropic_Research）**：
+- ArXiv_HiCite：Semantic Scholar Bulk Search API 筛选的高引用 arXiv 预印本，`acceptance_type = "High-Impact Preprint"`
+- HF_DailyPapers：HuggingFace Daily Papers 社区精选论文，`acceptance_type = "Community Selected"`
+- Anthropic_Research：Anthropic 研究博客 + transformer-circuits.pub，`acceptance_type = "Technical Report"`
+- 这三类 venue 不参与 bare-`Accept` 检查（H3）
+- 摘要覆盖率默认阈值：ArXiv_HiCite / HF_DailyPapers 80%，Anthropic_Research 70%（og:description 级别）
+
+**去重优先级链**（`dedup_against_peer_reviewed` in `merge.py`）：
+
+```
+同行评审 venue > ArXiv_HiCite > Anthropic_Research ≈ HF_DailyPapers
+```
+
+去重分两轮执行：
+1. 第一轮：所有非同行评审记录 vs 同行评审记录（arxiv_id 精确 + normalized title 匹配），重复的非同行评审记录移除。同时在非同行评审记录之间做 first-seen 去重（先出现的保留）。
+2. 第二轮：HF_DailyPapers vs ArXiv_HiCite（同一篇论文同时满足高引用和高 upvotes 时，保留 ArXiv_HiCite 版本，因为有引用数这个客观指标）。
+
+**"先有 HF 条目、后中稿"场景**：下次 build 时会议版本入库后，dedup 第一轮自动移除 HF 版本。无需手动干预。

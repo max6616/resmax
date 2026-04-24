@@ -618,6 +618,153 @@
       },
       "auxiliary_sources": [],
       "notes": "OpenAlex API. ISSN=2162-237X. IEEE TNNLS. 2026 partial year."
+    },
+    {
+      "venue": "ArXiv_HiCite",
+      "year": 2024,
+      "conf_year": "ArXiv_HiCite_2024",
+      "status": "active",
+      "skip_reason": "",
+      "primary_source": {
+        "kind": "s2_bulk_search",
+        "url": "https://api.semanticscholar.org/graph/v1/paper/search/bulk",
+        "parser": "s2_bulk_papers",
+        "expected_count": null,
+        "parser_args": "year=2024,minCitationCount=auto"
+      },
+      "auxiliary_sources": [],
+      "notes": "S2 Bulk Search: high-citation arXiv preprints not in peer-reviewed venues. CS field, dynamic citation threshold."
+    },
+    {
+      "venue": "ArXiv_HiCite",
+      "year": 2025,
+      "conf_year": "ArXiv_HiCite_2025",
+      "status": "active",
+      "skip_reason": "",
+      "primary_source": {
+        "kind": "s2_bulk_search",
+        "url": "https://api.semanticscholar.org/graph/v1/paper/search/bulk",
+        "parser": "s2_bulk_papers",
+        "expected_count": null,
+        "parser_args": "year=2025,minCitationCount=auto"
+      },
+      "auxiliary_sources": [],
+      "notes": "S2 Bulk Search: high-citation arXiv preprints. 2025. Dynamic citation threshold."
+    },
+    {
+      "venue": "ArXiv_HiCite",
+      "year": 2026,
+      "conf_year": "ArXiv_HiCite_2026",
+      "status": "active",
+      "skip_reason": "",
+      "primary_source": {
+        "kind": "s2_bulk_search",
+        "url": "https://api.semanticscholar.org/graph/v1/paper/search/bulk",
+        "parser": "s2_bulk_papers",
+        "expected_count": null,
+        "parser_args": "year=2026,minCitationCount=auto"
+      },
+      "auxiliary_sources": [],
+      "notes": "S2 Bulk Search: high-citation arXiv preprints. 2026 partial year. Dynamic citation threshold."
+    },
+    {
+      "venue": "HF_DailyPapers",
+      "year": 2024,
+      "conf_year": "HF_DailyPapers_2024",
+      "status": "active",
+      "skip_reason": "",
+      "primary_source": {
+        "kind": "hf_daily_papers_api",
+        "url": "https://huggingface.co/api/daily_papers",
+        "parser": "hf_daily_papers",
+        "expected_count": null,
+        "parser_args": "year=2024,minUpvotes=30"
+      },
+      "auxiliary_sources": [],
+      "notes": "HuggingFace Daily Papers: community-selected papers with >=30 upvotes."
+    },
+    {
+      "venue": "HF_DailyPapers",
+      "year": 2025,
+      "conf_year": "HF_DailyPapers_2025",
+      "status": "active",
+      "skip_reason": "",
+      "primary_source": {
+        "kind": "hf_daily_papers_api",
+        "url": "https://huggingface.co/api/daily_papers",
+        "parser": "hf_daily_papers",
+        "expected_count": null,
+        "parser_args": "year=2025,minUpvotes=30"
+      },
+      "auxiliary_sources": [],
+      "notes": "HuggingFace Daily Papers: community-selected papers. 2025."
+    },
+    {
+      "venue": "HF_DailyPapers",
+      "year": 2026,
+      "conf_year": "HF_DailyPapers_2026",
+      "status": "active",
+      "skip_reason": "",
+      "primary_source": {
+        "kind": "hf_daily_papers_api",
+        "url": "https://huggingface.co/api/daily_papers",
+        "parser": "hf_daily_papers",
+        "expected_count": null,
+        "parser_args": "year=2026,minUpvotes=15"
+      },
+      "auxiliary_sources": [],
+      "notes": "HuggingFace Daily Papers: community-selected papers. 2026 partial year, lower threshold."
+    },
+    {
+      "venue": "Anthropic_Research",
+      "year": 2024,
+      "conf_year": "Anthropic_Research_2024",
+      "status": "active",
+      "skip_reason": "",
+      "primary_source": {
+        "kind": "anthropic_sitemap_cached",
+        "url": "https://www.anthropic.com/research",
+        "parser": "anthropic_research",
+        "expected_count": null,
+        "parser_args": ""
+      },
+      "auxiliary_sources": [],
+      "notes": "Anthropic research blog + transformer-circuits.pub. Sitemap scrape, filtered by year.",
+      "expected_abstract_coverage": 70.0
+    },
+    {
+      "venue": "Anthropic_Research",
+      "year": 2025,
+      "conf_year": "Anthropic_Research_2025",
+      "status": "active",
+      "skip_reason": "",
+      "primary_source": {
+        "kind": "anthropic_sitemap_cached",
+        "url": "https://www.anthropic.com/research",
+        "parser": "anthropic_research",
+        "expected_count": null,
+        "parser_args": ""
+      },
+      "auxiliary_sources": [],
+      "notes": "Anthropic research blog. 2025.",
+      "expected_abstract_coverage": 70.0
+    },
+    {
+      "venue": "Anthropic_Research",
+      "year": 2026,
+      "conf_year": "Anthropic_Research_2026",
+      "status": "active",
+      "skip_reason": "",
+      "primary_source": {
+        "kind": "anthropic_sitemap_cached",
+        "url": "https://www.anthropic.com/research",
+        "parser": "anthropic_research",
+        "expected_count": null,
+        "parser_args": ""
+      },
+      "auxiliary_sources": [],
+      "notes": "Anthropic research blog. 2026 partial year.",
+      "expected_abstract_coverage": 70.0
     }
   ]
 }

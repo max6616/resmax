@@ -155,6 +155,76 @@ def merge_records(primary_records: list[AcceptedPaperRecord], auxiliary_records:
     return assign_stable_ids(output, existing_records)
 
 
+NON_PEER_REVIEWED_VENUES = {"ArXiv_HiCite", "HF_DailyPapers", "Anthropic_Research"}
+
+NON_PEER_REVIEWED_PRIORITY = ["ArXiv_HiCite", "HF_DailyPapers"]
+
+
+def dedup_against_peer_reviewed(
+    all_records: list[AcceptedPaperRecord],
+) -> list[AcceptedPaperRecord]:
+    """Remove duplicate records across venue tiers.
+
+    Priority order: peer-reviewed > ArXiv_HiCite > HF_DailyPapers.
+    Dedup keys: (1) arxiv_id exact match, (2) normalized title match.
+    """
+    seen_arxiv: set[str] = set()
+    seen_title: set[str] = set()
+    for r in all_records:
+        if r.venue not in NON_PEER_REVIEWED_VENUES:
+            if r.arxiv_id:
+                seen_arxiv.add(r.arxiv_id.strip().lower())
+            seen_title.add(normalize_title(r.title))
+
+    kept: list[AcceptedPaperRecord] = []
+    dropped_pr = 0
+    dropped_cross = 0
+
+    for r in all_records:
+        if r.venue not in NON_PEER_REVIEWED_VENUES:
+            kept.append(r)
+            continue
+        aid = (r.arxiv_id or "").strip().lower()
+        ntitle = normalize_title(r.title)
+        if (aid and aid in seen_arxiv) or ntitle in seen_title:
+            dropped_pr += 1
+            continue
+        kept.append(r)
+        if aid:
+            seen_arxiv.add(aid)
+        seen_title.add(ntitle)
+
+    # Second pass: among non-peer-reviewed, ArXiv_HiCite wins over HF
+    final: list[AcceptedPaperRecord] = []
+    hicite_arxiv: set[str] = set()
+    hicite_title: set[str] = set()
+    for r in kept:
+        if r.venue == "ArXiv_HiCite":
+            aid = (r.arxiv_id or "").strip().lower()
+            if aid:
+                hicite_arxiv.add(aid)
+            hicite_title.add(normalize_title(r.title))
+
+    for r in kept:
+        if r.venue == "HF_DailyPapers":
+            aid = (r.arxiv_id or "").strip().lower()
+            ntitle = normalize_title(r.title)
+            if (aid and aid in hicite_arxiv) or ntitle in hicite_title:
+                dropped_cross += 1
+                continue
+        final.append(r)
+
+    total_dropped = dropped_pr + dropped_cross
+    if total_dropped:
+        parts = []
+        if dropped_pr:
+            parts.append(f"{dropped_pr} vs peer-reviewed")
+        if dropped_cross:
+            parts.append(f"{dropped_cross} HF vs ArXiv_HiCite")
+        print(f"  [dedup] removed {total_dropped} duplicates ({', '.join(parts)})")
+    return final
+
+
 def write_csv(path: Path, records: list[AcceptedPaperRecord]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
 

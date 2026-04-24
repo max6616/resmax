@@ -1099,6 +1099,144 @@ def parse_acmmm_html(text: str, conf: ConferenceYearConfig, source: SourceConfig
     return records
 
 
+def parse_s2_bulk_papers(
+    payload: list, conf: ConferenceYearConfig, source: SourceConfig,
+) -> list[AcceptedPaperRecord]:
+    """Parse Semantic Scholar bulk search results into AcceptedPaperRecords.
+
+    Filters to arXiv-only papers (must have externalIds.ArXiv).
+    """
+    records: list[AcceptedPaperRecord] = []
+    for paper in payload:
+        ext_ids = paper.get("externalIds") or {}
+        arxiv_id = (ext_ids.get("ArXiv") or "").strip()
+        if not arxiv_id:
+            continue
+
+        title = normalize_whitespace(str(paper.get("title", "") or ""))
+        if not title:
+            continue
+
+        authors_list = paper.get("authors") or []
+        authors_text = "; ".join(
+            (a.get("name") or "").strip()
+            for a in authors_list
+            if (a.get("name") or "").strip()
+        )
+
+        abstract = normalize_whitespace(str(paper.get("abstract", "") or ""))
+        citation_count = paper.get("citationCount", 0) or 0
+        doi = (ext_ids.get("DOI") or "").strip()
+        oa_pdf = paper.get("openAccessPdf") or {}
+        pdf_url = (oa_pdf.get("url") or "").strip()
+        s2_url = (paper.get("url") or "").strip()
+
+        records.append(AcceptedPaperRecord(
+            title=title,
+            authors=authors_text,
+            venue=conf.venue,
+            year=conf.year,
+            conf_year=conf.conf_year,
+            source_type=source.kind,
+            source_url=source.url,
+            arxiv_id=arxiv_id,
+            arxiv_url=f"https://arxiv.org/abs/{arxiv_id}",
+            abstract_raw=abstract,
+            doi=doi,
+            paper_link=pdf_url or s2_url,
+            decision="Accept",
+            acceptance_type="High-Impact Preprint",
+            extras={"citation_count": str(citation_count)},
+        ))
+    print(f"  [s2-bulk] parsed {len(records)} arXiv papers from {conf.conf_year}")
+    return records
+
+
+def parse_hf_daily_papers(
+    payload: list, conf: ConferenceYearConfig, source: SourceConfig,
+) -> list[AcceptedPaperRecord]:
+    """Parse HuggingFace Daily Papers API results."""
+    records: list[AcceptedPaperRecord] = []
+    for entry in payload:
+        paper = entry.get("paper", {})
+        arxiv_id = (paper.get("id") or "").strip()
+        if not arxiv_id:
+            continue
+
+        title = normalize_whitespace(str(paper.get("title", "") or ""))
+        if not title:
+            continue
+
+        authors_list = paper.get("authors") or []
+        authors_text = "; ".join(
+            (a.get("name") or "").strip()
+            for a in authors_list
+            if (a.get("name") or "").strip()
+        )
+
+        abstract = normalize_whitespace(str(paper.get("summary", "") or ""))
+        upvotes = entry.get("_upvotes", entry.get("upvotes", 0))
+
+        records.append(AcceptedPaperRecord(
+            title=title,
+            authors=authors_text,
+            venue=conf.venue,
+            year=conf.year,
+            conf_year=conf.conf_year,
+            source_type=source.kind,
+            source_url=source.url,
+            arxiv_id=arxiv_id,
+            arxiv_url=f"https://arxiv.org/abs/{arxiv_id}",
+            abstract_raw=abstract,
+            paper_link=f"https://huggingface.co/papers/{arxiv_id}",
+            decision="Accept",
+            acceptance_type="Community Selected",
+            extras={"hf_upvotes": str(upvotes)},
+        ))
+    print(f"  [hf-daily] parsed {len(records)} papers from {conf.conf_year}")
+    return records
+
+
+def parse_anthropic_research(
+    payload: list, conf: ConferenceYearConfig, source: SourceConfig,
+) -> list[AcceptedPaperRecord]:
+    """Parse Anthropic research page scrape results."""
+    from .normalize import extract_arxiv_id as _extract_arxiv_id
+    records: list[AcceptedPaperRecord] = []
+    for article in payload:
+        title = normalize_whitespace(str(article.get("title", "") or ""))
+        if not title:
+            continue
+
+        arxiv_url = (article.get("arxiv_url") or "").strip()
+        arxiv_id = _extract_arxiv_id(arxiv_url) if arxiv_url else ""
+        full_paper = (article.get("full_paper_url") or "").strip()
+        page_url = (article.get("page_url") or "").strip()
+
+        records.append(AcceptedPaperRecord(
+            title=title,
+            authors="Anthropic",
+            venue=conf.venue,
+            year=conf.year,
+            conf_year=conf.conf_year,
+            source_type=source.kind,
+            source_url=source.url,
+            arxiv_id=arxiv_id,
+            arxiv_url=arxiv_url,
+            abstract_raw=normalize_whitespace(str(article.get("description", "") or "")),
+            paper_link=full_paper or arxiv_url or page_url,
+            decision="Accept",
+            acceptance_type="Technical Report",
+            extras={
+                "anthropic_page_url": page_url,
+                "full_paper_url": full_paper,
+                "published_date": article.get("date", ""),
+            },
+        ))
+    print(f"  [anthropic] parsed {len(records)} articles from {conf.conf_year}")
+    return records
+
+
 PARSERS: dict[str, Callable[[object, ConferenceYearConfig, SourceConfig], list[AcceptedPaperRecord]]] = {
     "openreview_notes_json": parse_openreview_notes_json,
     "openreview_api_v2": parse_openreview_api_v2,
@@ -1116,6 +1254,9 @@ PARSERS: dict[str, Callable[[object, ConferenceYearConfig, SourceConfig], list[A
     "acmmm_vue_accepted": lambda payload, conf, source: parse_acmmm_vue_accepted(str(payload), conf, source),
     "openalex_works": parse_openalex_works,
     "jmlr_html": lambda payload, conf, source: parse_jmlr_html(str(payload), conf, source),
+    "s2_bulk_papers": parse_s2_bulk_papers,
+    "hf_daily_papers": parse_hf_daily_papers,
+    "anthropic_research": parse_anthropic_research,
 }
 
 

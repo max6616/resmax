@@ -48,3 +48,4 @@ tmp/
 # === Archive (optional: uncomment if you want to exclude) ===
 _archive_paperAnalysis/
 _archive_resmax/
+docs/

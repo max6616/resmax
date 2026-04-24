@@ -262,3 +262,254 @@ def fetch_openalex_works(
 
     print(f"  [OpenAlex] fetched {len(all_works)} works in {page_num} pages")
     return all_works
+
+
+def fetch_s2_bulk_search(
+    year: int,
+    min_citation_count: int = 50,
+    fields_of_study: str = "Computer Science",
+    timeout: int = 30,
+) -> list[dict]:
+    """Fetch high-citation arXiv preprints via Semantic Scholar Bulk Search API.
+
+    Uses cursor-based pagination. Returns papers that:
+    - Are in the given fieldsOfStudy
+    - Were published in the given year
+    - Have >= min_citation_count citations
+    - Have an arXiv external ID (i.e. are on arXiv)
+    """
+    import os
+
+    api_key = os.environ.get("S2_API_KEY", "")
+    base = "https://api.semanticscholar.org/graph/v1/paper/search/bulk"
+    fields = "paperId,externalIds,title,abstract,authors,year,citationCount,publicationTypes,openAccessPdf,url"
+    all_papers: list[dict] = []
+    token: str | None = None
+    page_num = 0
+
+    while True:
+        params: dict[str, str] = {
+            "query": "",
+            "fieldsOfStudy": fields_of_study,
+            "year": str(year),
+            "minCitationCount": str(min_citation_count),
+            "fields": fields,
+        }
+        if token:
+            params["token"] = token
+
+        url = f"{base}?{urllib.parse.urlencode(params)}"
+        headers: dict[str, str] = {
+            "User-Agent": "resmax-accepted-index/1.0",
+            "Accept": "application/json",
+        }
+        if api_key:
+            headers["x-api-key"] = api_key
+
+        raw = _fetch_with_total_timeout(
+            url, headers=headers,
+            socket_timeout=timeout,
+            total_timeout=max(timeout * 4, 180),
+        )
+        data = json.loads(raw.decode("utf-8", errors="replace"))
+
+        papers = data.get("data", [])
+        all_papers.extend(papers)
+        page_num += 1
+
+        if page_num == 1:
+            total = data.get("total", "?")
+            print(f"  [S2-bulk] year={year}, minCite={min_citation_count}, total={total}")
+
+        token = data.get("token")
+        if not token or not papers:
+            break
+        time.sleep(1.0)
+
+    print(f"  [S2-bulk] fetched {len(all_papers)} papers in {page_num} pages")
+    return all_papers
+
+
+def _curl_json(url: str, timeout: int = 15) -> object:
+    """Fetch JSON via curl subprocess (fallback for hosts where urllib fails)."""
+    import subprocess
+    result = subprocess.run(
+        ["curl", "-s", "--max-time", str(timeout), "-H", "User-Agent: resmax-accepted-index/1.0", url],
+        capture_output=True, text=True, timeout=timeout + 5,
+    )
+    if result.returncode != 0:
+        raise RuntimeError(f"curl failed (rc={result.returncode}): {result.stderr[:200]}")
+    return json.loads(result.stdout)
+
+
+def fetch_hf_daily_papers(
+    year: int,
+    min_upvotes: int = 10,
+    timeout: int = 15,
+) -> list[dict]:
+    """Fetch community-selected papers from HuggingFace Daily Papers API.
+
+    Iterates day-by-day through the target year using the ``date`` query
+    parameter (the only reliable pagination method — ``skip`` is broken
+    on this endpoint).  Uses curl as HTTP client because Python urllib
+    cannot connect to huggingface.co on some systems.
+    """
+    from datetime import date as _date, timedelta
+
+    base = "https://huggingface.co/api/daily_papers"
+
+    start = _date(year, 1, 1)
+    today = _date.today()
+    end = min(_date(year, 12, 31), today)
+    all_papers: list[dict] = []
+    seen_ids: set[str] = set()
+    day = start
+    fetch_days = 0
+
+    while day <= end:
+        url = f"{base}?date={day.isoformat()}&limit=100"
+        try:
+            data = _curl_json(url, timeout=timeout)
+        except Exception as exc:
+            print(f"  [HF-daily] {day}: fetch error: {exc}")
+            day += timedelta(days=1)
+            continue
+
+        if not isinstance(data, list) or not data:
+            day += timedelta(days=1)
+            time.sleep(0.05)
+            continue
+
+        fetch_days += 1
+        for entry in data:
+            paper = entry.get("paper", {})
+            arxiv_id = (paper.get("id") or "").strip()
+            if not arxiv_id or arxiv_id in seen_ids:
+                continue
+            upvotes = paper.get("upvotes", 0)
+            if upvotes >= min_upvotes:
+                entry["_upvotes"] = upvotes
+                all_papers.append(entry)
+                seen_ids.add(arxiv_id)
+
+        day += timedelta(days=1)
+        time.sleep(0.1)
+
+    print(f"  [HF-daily] year={year}, minUpvotes={min_upvotes}, fetched {len(all_papers)} papers from {fetch_days} active days")
+    return all_papers
+
+
+def _curl_html(url: str, timeout: int = 10, retries: int = 2) -> str:
+    """Fetch HTML via curl subprocess with retries."""
+    import subprocess
+    for attempt in range(retries + 1):
+        result = subprocess.run(
+            ["curl", "-s", "--max-time", str(timeout),
+             "-H", "User-Agent: resmax-accepted-index/1.0", url],
+            capture_output=True, text=True, timeout=timeout + 5,
+        )
+        if result.stdout and len(result.stdout) > 100:
+            return result.stdout
+        if attempt < retries:
+            time.sleep(1.0)
+    return result.stdout
+
+
+def fetch_anthropic_research(year: int | None = None, timeout: int = 10) -> list[dict]:
+    """Fetch Anthropic research articles from sitemap + per-page scraping.
+
+    Returns a list of dicts with keys: slug, title, date, description,
+    arxiv_url, full_paper_url, page_url.
+    """
+    import re
+    import subprocess
+    from datetime import date as _date
+
+    # Step 1: get all research URLs from sitemap
+    r = subprocess.run(
+        ["curl", "-s", "--max-time", "10", "https://www.anthropic.com/sitemap.xml"],
+        capture_output=True, text=True, timeout=15,
+    )
+    urls = re.findall(
+        r"<loc>(https://www\.anthropic\.com/research/[^<]+)</loc>", r.stdout
+    )
+    urls = [u for u in urls if "/research/team/" not in u]
+    print(f"  [anthropic] sitemap: {len(urls)} research URLs")
+
+    # Step 2: scrape each page
+    all_articles: list[dict] = []
+    date_re = re.compile(
+        r"((?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|"
+        r"Jul(?:y)?|Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|Nov(?:ember)?|"
+        r"Dec(?:ember)?)\s+\d{1,2},?\s+\d{4})"
+    )
+    month_map = {
+        "jan": 1, "feb": 2, "mar": 3, "apr": 4, "may": 5, "jun": 6,
+        "jul": 7, "aug": 8, "sep": 9, "oct": 10, "nov": 11, "dec": 12,
+    }
+
+    for i, url in enumerate(urls):
+        slug = url.split("/research/")[-1]
+        try:
+            html = _curl_html(url, timeout=timeout)
+            if not html:
+                continue
+
+            # Title
+            m = re.search(r"<title>([^<]+)</title>", html)
+            if not m:
+                continue
+            title = m.group(1).split("\\")[0].split("—")[0].split("|")[0].strip()
+            if title.lower() in ("anthropic", "research", ""):
+                continue
+
+            # Date — first match in page
+            dm = date_re.search(html)
+            pub_date = ""
+            pub_year = 0
+            if dm:
+                raw_date = dm.group(1)
+                parts = raw_date.replace(",", "").split()
+                if len(parts) >= 3:
+                    mon = month_map.get(parts[0][:3].lower(), 0)
+                    day_num = int(parts[1])
+                    yr = int(parts[2])
+                    pub_date = f"{yr}-{mon:02d}-{day_num:02d}"
+                    pub_year = yr
+
+            # Filter by year if specified
+            if year and pub_year and pub_year != year:
+                continue
+
+            # Description
+            desc = ""
+            m2 = re.search(r'og:description["\s]+content="([^"]+)"', html)
+            if not m2:
+                m2 = re.search(r'name="description"[^>]*content="([^"]+)"', html)
+            if m2:
+                import html as html_mod
+                desc = html_mod.unescape(m2.group(1)).strip()
+
+            # Links
+            arxiv_urls = re.findall(r'href="(https?://arxiv\.org/abs/[^"]+)"', html)
+            tc_urls = re.findall(r'href="(https?://transformer-circuits\.pub[^"]+)"', html)
+
+            all_articles.append({
+                "slug": slug,
+                "title": title,
+                "date": pub_date,
+                "year": pub_year,
+                "description": desc,
+                "arxiv_url": arxiv_urls[0] if arxiv_urls else "",
+                "full_paper_url": tc_urls[0] if tc_urls else "",
+                "page_url": url,
+            })
+        except Exception as exc:
+            print(f"  [anthropic] {slug}: error: {exc}")
+        if (i + 1) % 20 == 0:
+            print(f"  [anthropic] scraped {i + 1}/{len(urls)} pages ...")
+        time.sleep(0.2)
+
+    print(f"  [anthropic] fetched {len(all_articles)} articles" +
+          (f" for year={year}" if year else ""))
+    return all_articles

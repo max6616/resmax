@@ -18,12 +18,15 @@ import secrets_loader  # noqa: E402,F401
 from accepted_index_builder.fetchers import (
     fetch_aaai_ojs_all_issues,
     fetch_acmmm_vue_accepted_chunk,
+    fetch_anthropic_research,
+    fetch_hf_daily_papers,
     fetch_json,
     fetch_openalex_works,
     fetch_openreview_api_v2,
+    fetch_s2_bulk_search,
     fetch_text,
 )
-from accepted_index_builder.merge import load_existing_records, merge_records, write_csv
+from accepted_index_builder.merge import dedup_against_peer_reviewed, load_existing_records, merge_records, write_csv
 from accepted_index_builder.models import AcceptedPaperRecord, ConferenceYearConfig, SourceConfig
 from accepted_index_builder.parsers import parse_payload
 from accepted_index_builder.registry import load_registry
@@ -56,7 +59,50 @@ def should_include(conf: ConferenceYearConfig, venues: set[str], years: set[str]
     return True
 
 
+def _parse_kv_args(raw: str | None) -> dict[str, str]:
+    """Parse 'key=val,key2=val2' from source.parser_args."""
+    out: dict[str, str] = {}
+    for part in (raw or "").split(","):
+        if "=" in part:
+            k, v = part.split("=", 1)
+            out[k.strip()] = v.strip()
+    return out
+
+
 def fetch_and_parse(source: SourceConfig, conf: ConferenceYearConfig, fixtures_dir: Path) -> list[AcceptedPaperRecord]:
+    if source.kind == "s2_bulk_search":
+        kv = _parse_kv_args(source.parser_args)
+        year = int(kv.get("year", str(conf.year)))
+        raw_cite = kv.get("minCitationCount", "auto")
+        if raw_cite == "auto":
+            from datetime import date as _date
+            months_elapsed = (_date.today().year - year) * 12 + _date.today().month
+            min_cite = max(10, int(100 * months_elapsed / 24))
+            print(f"  [S2-bulk] auto threshold: year={year}, months={months_elapsed}, minCite={min_cite}")
+        else:
+            min_cite = int(raw_cite)
+        papers = fetch_s2_bulk_search(year=year, min_citation_count=min_cite)
+        return parse_payload(papers, conf, source)
+    if source.kind == "hf_daily_papers_api":
+        kv = _parse_kv_args(source.parser_args)
+        year = int(kv.get("year", str(conf.year)))
+        min_upvotes = int(kv.get("minUpvotes", "30"))
+        papers = fetch_hf_daily_papers(year=year, min_upvotes=min_upvotes)
+        return parse_payload(papers, conf, source)
+    if source.kind == "anthropic_sitemap":
+        year = conf.year
+        articles = fetch_anthropic_research(year=year)
+        return parse_payload(articles, conf, source)
+    if source.kind == "anthropic_sitemap_cached":
+        year = conf.year
+        cache_key = "_anthropic_cache"
+        if not hasattr(fetch_and_parse, cache_key):
+            all_articles = fetch_anthropic_research(year=None)
+            setattr(fetch_and_parse, cache_key, all_articles)
+        cached = getattr(fetch_and_parse, cache_key)
+        year_articles = [a for a in cached if a.get("year") == year]
+        print(f"  [anthropic-cached] {len(year_articles)} articles for year={year} (from {len(cached)} total)")
+        return parse_payload(year_articles, conf, source)
     if source.kind == "openalex_api":
         source_id = source.url
         year = int(source.parser_args) if source.parser_args else conf.year
@@ -147,6 +193,14 @@ def main() -> int:
                 print(f"  auxiliary[{si}] FAILED in {time.time()-t2:.1f}s: {exc}", flush=True)
 
         merged_records = merge_records(primary_records, auxiliary_records, existing_records)
+
+        # Safety: if fetch failed and returned 0 records, preserve existing data
+        if not merged_records and errors:
+            fallback = [r for r in existing_records if r.conf_year == conf.conf_year]
+            if fallback:
+                merged_records = fallback
+                print(f"  ⚠ fetch failed, preserving {len(fallback)} existing records for {conf.conf_year}", flush=True)
+
         final_records.extend(merged_records)
         print(f"  merged: {len(merged_records)} records", flush=True)
         report_sections.append({
@@ -184,6 +238,8 @@ def main() -> int:
             "errors": [],
         })
     report_sections.sort(key=lambda s: s["conf_year"])
+
+    final_records = dedup_against_peer_reviewed(final_records)
 
     write_csv(out_path, final_records)
     write_report(report_path, report_sections)
