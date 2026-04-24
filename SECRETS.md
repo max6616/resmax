@@ -25,7 +25,7 @@ done
 ```
 
 Scripts auto-source every `.env` in both directories via the shared
-loader at `.cursor/skills/_shared/secrets_loader.py`; no manual
+loader at `.agents/skills/_shared/secrets_loader.py`; no manual
 `source` command is required. (You can still `source .secrets/*.env` in
 your shell if you want the values available to ad-hoc commands.)
 
@@ -57,7 +57,7 @@ your shell if you want the values available to ad-hoc commands.)
 
 ## 3. Information supplement protocol (for agents)
 
-All skills read secrets through `.cursor/skills/_shared/secrets_loader.py`.
+All skills read secrets through `.agents/skills/_shared/secrets_loader.py`.
 When a hard-required value is missing, that helper raises
 `MissingSecretError`, which is printed to the script's stderr with the
 fixed prefix:

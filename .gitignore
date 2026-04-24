@@ -29,7 +29,7 @@ tmp/
 *.log
 *.tmp
 
-# === Claude / Cursor local config ===
+# === Agent local config ===
 .claude/settings.local.json
 
 # === Secrets (real credentials) ===

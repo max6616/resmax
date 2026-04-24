@@ -65,11 +65,14 @@ Each layer only reads the previous layer's artifacts, so stages can be rerun, sw
 
 ```
 resmax/
-├── .cursor/skills/              # Cursor Agent Skills (core capabilities)
+├── .agents/skills/              # Agent Skills (core capabilities)
 │   ├── _shared/                 #   cross-skill utilities (secrets_loader, ...)
 │   ├── resmax-database/         #   Skill 1: base literature index
 │   ├── resmax-embedding/        #   Skill 2: embedding cache on GPU
 │   └── resmax-survey/           #   Skill 3: topic-level retrieval + ranking
+├── .claude/skills -> ../.agents/skills
+├── .codex/skills  -> ../.agents/skills
+├── .cursor/skills -> ../.agents/skills
 ├── paper_database/              # full index + embedding cache (gitignored)
 ├── literature_research/         # per-topic retrieval outputs (gitignored)
 ├── .secrets/                    # API credentials (gitignored, templates only)
@@ -80,6 +83,8 @@ resmax/
 ├── README.md                    # English (default on GitHub)
 └── README_zh.md                 # Chinese
 ```
+
+`.agents/skills` is the canonical skill source. `.claude/skills`, `.codex/skills`, and `.cursor/skills` are compatibility symlinks so Claude Code, Codex, Cursor, and other Agent Skills-compatible tools can auto-discover the same `SKILL.md` bundles without duplicated files.
 
 > `paper_database/` and `literature_research/` are gitignored. Inside `.secrets/` and `.localconfig/` only `*.env.example` and `README.md` are tracked.
 
@@ -144,9 +149,9 @@ The agent will read the matching `SKILL.md` and execute the stages in order. Whe
 
 | # | Skill | Role | Main artifacts | SKILL.md |
 |---|-------|------|----------------|----------|
-| 1 | `resmax-database` | Multi-source accepted-list fetch + batch enrichment (abstracts / reviews / code / acceptance type) | `accepted_index.csv` + `reviews/` | [link](./.cursor/skills/resmax-database/SKILL.md) |
-| 2 | `resmax-embedding` | Encode title+abstract with Qwen3-Embedding-8B on a GPU server; emit `.npz` cache | `embedding_cache/qwen3_8b.npz` | [link](./.cursor/skills/resmax-embedding/SKILL.md) |
-| 3 | `resmax-survey`   | Dual retrieval (keyword + embedding) → merge → per-paper scoring → main-agent review → ranked list | `literature_research/<topic>/literature_list.md` | [link](./.cursor/skills/resmax-survey/SKILL.md) |
+| 1 | `resmax-database` | Multi-source accepted-list fetch + batch enrichment (abstracts / reviews / code / acceptance type) | `accepted_index.csv` + `reviews/` | [link](./.agents/skills/resmax-database/SKILL.md) |
+| 2 | `resmax-embedding` | Encode title+abstract with Qwen3-Embedding-8B on a GPU server; emit `.npz` cache | `embedding_cache/qwen3_8b.npz` | [link](./.agents/skills/resmax-embedding/SKILL.md) |
+| 3 | `resmax-survey`   | Dual retrieval (keyword + embedding) → merge → per-paper scoring → main-agent review → ranked list | `literature_research/<topic>/literature_list.md` | [link](./.agents/skills/resmax-survey/SKILL.md) |
 
 Each skill's internal stages, parameters, error handling and behavioural constraints are documented as an "API manual" inside its own `SKILL.md`, which is the authoritative reference for the agent.
 

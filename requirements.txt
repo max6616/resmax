@@ -7,6 +7,8 @@
 
 # --- Core ---------------------------------------------------------------
 numpy>=1.24.0                # resmax-embedding, resmax-survey (vector ops)
+aiohttp>=3.9.0               # resmax-database abstract fallback
+openreview-py>=1.46.0        # resmax-database review fetch mode
 
 # --- GPU embedding (resmax-embedding + local query encode) --------------
 # Skip this group if you only use the remote SSH encode path and never
@@ -14,6 +16,7 @@ numpy>=1.24.0                # resmax-embedding, resmax-survey (vector ops)
 torch>=2.0.0
 transformers>=4.40.0
 bitsandbytes>=0.43.0         # 4-bit quantization via BitsAndBytesConfig
+sentence-transformers>=2.7.0 # local query embedding fallback
 
 # --- resmax-survey Stage 5.5 (paper source fetch) -----------------------
 requests>=2.31.0             # PDF / arXiv tarball download
