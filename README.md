@@ -95,45 +95,48 @@ resmax/
 | Component | Version / Notes | Required when |
 |-----------|-----------------|---------------|
 | Python | 3.10+ | all skills |
-| [Cursor](https://cursor.com/) IDE or CLI | with Agent Skills support | driving every workflow in this repo |
+| Codex, Cursor, or another Agent Skills-compatible agent | with local `SKILL.md` support | driving every workflow in this repo |
 | GPU server (optional) | CUDA + `torch` + `transformers` + Qwen3-Embedding-8B | building the embedding cache; local query encoding when the machine is memory-starved |
 | External API keys | OpenReview / GitHub / OpenAlex / Semantic Scholar / SerpAPI | `resmax-database` enrichment (mostly soft requirements — scripts degrade gracefully when missing) |
 
 Per-skill Python dependencies are aggregated in `requirements.txt` at the repo root.
 
-> **Note — Cursor-only for now.** Every workflow in this repo is currently driven by Cursor Agent reading the corresponding `SKILL.md`. Support for a more generic agent architecture (e.g. plain CLI entrypoints, other agent frameworks) is on the [Roadmap](#roadmap).
+> **Note:** `.agents/skills` is the canonical skill directory. Compatibility symlinks such as `.codex/skills`, `.cursor/skills`, and `.claude/skills` point compatible agents at the same skill set when available.
 
 ---
 
 ## Quick Start
 
-### 1. Clone and install
+### 1. Clone
 
 ```bash
 git clone https://github.com/max6616/resmax.git
 cd resmax
+```
 
-# Python deps (use a virtualenv / conda env if you like)
+### 2. Install Python dependencies
+
+Use a virtualenv or conda env if you prefer.
+
+```bash
 python -m pip install -r requirements.txt
 ```
 
-### 2. Configure credentials and local paths
+### 3. Run `resmax-init`
 
 ```bash
-# Materialize local .env files from the tracked templates (gitignored)
-for f in .secrets/*.env.example .localconfig/*.env.example; do
-  cp "$f" "${f%.example}"
-done
-
-# Fill in your API keys, SSH alias, conda env name, etc.
-$EDITOR .secrets/*.env .localconfig/*.env
+python3 .agents/skills/resmax-init/scripts/resmax_init_check.py --materialize
 ```
 
-See [`SECRETS.md`](./SECRETS.md) for the full field-by-field reference and the "missing-secret handling protocol" used by every skill.
+Then ask your agent to use `resmax-init` for the target you need, for example:
 
-### 3. Trigger skills from Cursor
+> Use `resmax-init` to initialize this checkout to `survey-ready`.
 
-The three skills are invoked through Cursor Agent via natural-language triggers:
+`resmax-init` explains which values are required, which are optional, where they are stored, and how to restore or build missing `paper_database/` artifacts. Real credentials stay in gitignored `.secrets/*.env`; machine-specific settings stay in gitignored `.localconfig/*.env`. See [`SECRETS.md`](./SECRETS.md) for the full field reference.
+
+### 4. Run workflow skills
+
+After initialization, invoke the workflow skills through your agent:
 
 | Goal | Example triggers | Output |
 |------|------------------|--------|
@@ -141,7 +144,7 @@ The three skills are invoked through Cursor Agent via natural-language triggers:
 | Build or refresh the embedding cache | "build embedding" / "refresh embedding cache" | `paper_database/embedding_cache/*.npz` |
 | Run a topic survey | "literature survey \<topic\>" / "retrieve papers for \<topic\>" | `literature_research/<topic>/` |
 
-The agent will read the matching `SKILL.md` and execute the stages in order. When a required secret is missing, it halts and asks you for the value as described in `SECRETS.md`.
+When a required value is missing, the agent must stop and ask instead of inventing a value.
 
 ---
 
@@ -149,6 +152,7 @@ The agent will read the matching `SKILL.md` and execute the stages in order. Whe
 
 | # | Skill | Role | Main artifacts | SKILL.md |
 |---|-------|------|----------------|----------|
+| 0 | `resmax-init` | First-time setup: local env files, required/optional fields, database artifact choices | `.secrets/*.env` + `.localconfig/*.env` + setup report | [link](./.agents/skills/resmax-init/SKILL.md) |
 | 1 | `resmax-database` | Multi-source accepted-list fetch + batch enrichment (abstracts / reviews / code / acceptance type) | `accepted_index.csv` + `reviews/` | [link](./.agents/skills/resmax-database/SKILL.md) |
 | 2 | `resmax-embedding` | Encode title+abstract with Qwen3-Embedding-8B on a GPU server; emit `.npz` cache | `embedding_cache/qwen3_8b.npz` | [link](./.agents/skills/resmax-embedding/SKILL.md) |
 | 3 | `resmax-survey`   | Dual retrieval (keyword + embedding) → merge → per-paper scoring → main-agent review → ranked list | `literature_research/<topic>/literature_list.md` | [link](./.agents/skills/resmax-survey/SKILL.md) |
