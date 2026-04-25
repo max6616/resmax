@@ -45,6 +45,12 @@ python3 .agents/skills/resmax-database/scripts/validate_database.py \
   --manifest paper_database/manifest.json
 ```
 
+## 执行注意
+
+- 如果 `RESMAX_SSH_REMOTE_DIR` 以 `~` 开头，远程 `ssh` 命令中不要把它整体包进引号；`cd $RESMAX_SSH_REMOTE_DIR` 可由远程 shell 展开，`cd "$RESMAX_SSH_REMOTE_DIR"` 会创建或访问字面量 `~/...` 路径。
+- 如果本地 `accepted_index.csv` 已经通过 `validate_database.py`，拉回缓存后优先用 `normalize_database.py --skip-normalize` 刷新 manifest；普通 normalize 会刷新时间戳字段，可能让缓存 meta 中的 `accepted_csv_sha256` 再次落后。
+- `build_cache_multigpu.py` 必须在没有新增 `paper_id` 时仍能重写 `.npz` metadata；否则 CSV 内容变化但 paper_id 集合不变时，缓存会保持旧 `accepted_csv_sha256`。
+
 ## 缓存契约
 
 `.npz` 必须包含：

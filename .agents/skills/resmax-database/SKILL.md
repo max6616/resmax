@@ -33,6 +33,11 @@ python3 $SKILL_ROOT/scripts/normalize_database.py \
   --csv paper_database/accepted_index.csv \
   --manifest paper_database/manifest.json
 
+python3 $SKILL_ROOT/scripts/ensure_reviews_available.py \
+  --csv paper_database/accepted_index.csv \
+  --reviews-dir paper_database/reviews \
+  --package-dir paper_database/hf_export/reviews
+
 python3 $SKILL_ROOT/scripts/validate_database.py \
   --csv paper_database/accepted_index.csv \
   --cache paper_database/embedding_cache/qwen3_8b.npz \
@@ -99,6 +104,46 @@ python3 $SKILL_ROOT/scripts/normalize_database.py \
 JSONL 每行至少包含 `paper_id`、`source_text_status`、`source_text_url`、`source_text_source`、`source_text_evidence`。只有真实 PDF/preprint 直链才能写 `source_text_status=pdf_available/preprint_available` 并同步到 `pdf_url`。
 
 `source_text_status` 允许把“有官方/出版商锚点但无 PDF”和“找到 PDF/preprint”区分开。不得为了追求 `pdf_url=100%` 把 DOI landing、venue poster 页或 source listing 填进 `pdf_url`。
+
+逐篇补摘要时，`abstract_raw` 必须来自权威页面、论文 PDF、OpenReview/arXiv/OA 元数据或机构 Pure/仓储页；subagent 的归纳总结只能作为检索线索，不能写入 `abstract_raw`。如果只能找到论文存在性证据而没有摘要原文，应保留 unresolved 队列，不能用模型改写文本冒充摘要。
+
+摘要内容更新后，现有 embedding cache 即使 ID 覆盖仍通过 validate，也应视为语义过期；恢复 GPU 后需要用 `resmax-embedding` 重新编码受影响论文或全量重建缓存。
+
+## Hugging Face 导出
+
+review JSON 缓存文件数很多，不适合逐文件上传到 Hugging Face。上传前先生成按 `conf_year` 分片的压缩包和索引：
+
+```bash
+python3 $SKILL_ROOT/scripts/package_reviews_for_hf.py \
+  --csv paper_database/accepted_index.csv \
+  --reviews-dir paper_database/reviews \
+  --out-dir paper_database/hf_export/reviews
+```
+
+产物包括 `reviews_index.csv` / `reviews_index.parquet`、`reviews_manifest.json`、`checksums.sha256` 和 `archives/reviews_<conf_year>.tar.zst`。上传到 HF dataset repo 时保留这些文件的相对路径，避免把 `paper_database/reviews/**/*.json` 原样上传。
+
+生产执行在 validate 或需要 review 信息前先调用 `ensure_reviews_available.py`。它的执行逻辑：
+
+1. 如果 `paper_database/reviews/{conf_year}/{forum_id}.json` 已覆盖 `accepted_index.csv` 中所有 `review_available=yes` 行，直接通过。
+2. 如果原始 JSON 缺失但本地存在 `paper_database/hf_export/reviews` package，自动校验并解压还原。
+3. 如果原始 JSON 和本地 package 都不存在，自动尝试从 Hugging Face 私有 dataset repo 下载 package，再校验并解压。下载 repo 通过 `--hf-repo-id` 或 `RESMAX_HF_DATASET_REPO` 指定，package 在 repo 内的路径默认是 `reviews/`，可用 `--hf-reviews-path` 或 `RESMAX_HF_REVIEWS_PATH` 覆盖。
+4. 如果无法下载、缺少 repo 配置、checksum/CSV hash/索引校验失败、或解压后仍缺文件，必须显式报错并终止；不得静默降级为“无 review”继续生产流程。
+
+部署者从 HF 下载 review package 后，也可以手动还原为现有数据库契约使用的原始 JSON 目录：
+
+```bash
+python3 $SKILL_ROOT/scripts/ensure_reviews_available.py \
+  --package-dir paper_database/hf_export/reviews \
+  --reviews-dir paper_database/reviews \
+  --csv paper_database/accepted_index.csv
+
+python3 $SKILL_ROOT/scripts/validate_database.py \
+  --csv paper_database/accepted_index.csv \
+  --cache paper_database/embedding_cache/qwen3_8b.npz \
+  --manifest paper_database/manifest.json
+```
+
+`ensure_reviews_available.py` 下载/还原后，现有 `enrich_reviews.py --rehydrate`、`validate_database.py` 和下游 skill 仍只读取 `paper_database/reviews/{conf_year}/{forum_id}.json`，不直接读取压缩包。
 
 ## 参考资料
 

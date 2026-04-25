@@ -52,6 +52,8 @@ your shell if you want the values available to ad-hoc commands.)
 | `RESMAX_SSH_REMOTE_SCRIPT` | `server.env` | same | Soft — defaults to `~/resmax_embedding_build/scripts/encode_query.py` |
 | `RESMAX_SSH_CONDA_ENV` | `server.env` | same | Soft — defaults to `llm` |
 | `RESMAX_SSH_CONDA_INIT` | `server.env` | same | Soft — defaults to `~/miniconda3/etc/profile.d/conda.sh` |
+| `RESMAX_HF_DATASET_REPO` | `huggingface.env` | `resmax-database/ensure_reviews_available.py` | **Yes**, only when raw review JSON and local review package are missing and the package should be downloaded from Hugging Face |
+| `RESMAX_HF_REVIEWS_PATH`, `RESMAX_HF_REPO_TYPE` | `huggingface.env` | same | Soft — default to `reviews` and `dataset` |
 
 ---
 

@@ -164,7 +164,7 @@ All machine-specific or private values stay out of git via two sibling directori
 | Directory | Purpose | Typical variables |
 |-----------|---------|-------------------|
 | `.secrets/` | API credentials, personal identifiers | `OPENREVIEW_USERNAME`, `GITHUB_TOKEN`, `OPENALEX_API_KEY`, `S2_API_KEY`, `SERPAPI_KEY`, `RESMAX_CONTACT_EMAIL` |
-| `.localconfig/` | Machine runtime settings | `RESMAX_SSH_HOST`, `RESMAX_SSH_REMOTE_DIR`, `RESMAX_SSH_CONDA_ENV` |
+| `.localconfig/` | Machine runtime settings | `RESMAX_SSH_HOST`, `RESMAX_SSH_REMOTE_DIR`, `RESMAX_SSH_CONDA_ENV`, `RESMAX_HF_DATASET_REPO` |
 
 Loader implementation, hard-vs-soft requirements, and the agent's standard response to a missing secret are all described in [`SECRETS.md`](./SECRETS.md).
 

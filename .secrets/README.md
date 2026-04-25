@@ -32,7 +32,7 @@ source .secrets/openreview.env
 
 ## Loader behaviour
 
-All skills read secrets through `.cursor/skills/_shared/secrets.py`. When a
+All skills read secrets through `.agents/skills/_shared/secrets_loader.py`. When a
 required env var is missing, the loader raises `MissingSecretError` with a
 standardised message that tells the agent:
 

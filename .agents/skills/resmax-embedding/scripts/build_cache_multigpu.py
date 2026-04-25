@@ -19,12 +19,37 @@ from pathlib import Path
 import numpy as np
 
 
+def is_valid_abstract(raw: str) -> bool:
+    text = (raw or "").strip()
+    if not text:
+        return False
+    if text.lower() in {"none", "null", "nan", "n/a", "international audience"}:
+        return False
+    return len(text) >= 10
+
+
 def _sha256_file(path: Path) -> str:
     h = hashlib.sha256()
     with path.open("rb") as f:
         for chunk in iter(lambda: f.read(1024 * 1024), b""):
             h.update(chunk)
     return h.hexdigest()
+
+
+def save_cache(out_path: Path, embeddings: np.ndarray, paper_ids: list[str], model_name: str, accepted_path: Path) -> None:
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    np.savez_compressed(
+        out_path,
+        embeddings=embeddings.astype(np.float32),
+        paper_ids=np.array(paper_ids, dtype=np.str_),
+        meta=json.dumps({
+            "model_name": model_name,
+            "dimension": embeddings.shape[1],
+            "count": len(paper_ids),
+            "accepted_csv_sha256": _sha256_file(accepted_path),
+            "paper_id_dtype": "str",
+        }),
+    )
 
 
 def encode_on_gpu(
@@ -105,7 +130,8 @@ def main():
     import csv
     print(f"[main] loading papers from {args.accepted}")
     with open(args.accepted, "r", encoding="utf-8") as f:
-        rows = list(csv.DictReader(f))
+        all_rows = list(csv.DictReader(f))
+    rows = [r for r in all_rows if r.get("paper_id", "") and is_valid_abstract(r.get("abstract_raw", ""))]
 
     all_paper_ids = [r.get("paper_id", "") for r in rows]
     all_texts = []
@@ -117,7 +143,7 @@ def main():
             text = args.instruction + text
         all_texts.append(text)
 
-    print(f"[main] {len(all_texts)} papers loaded")
+    print(f"[main] {len(all_texts)} queryable papers loaded ({len(all_rows)} CSV rows)")
 
     out_path = Path(args.out)
     existing_embs = None
@@ -138,6 +164,14 @@ def main():
                 existing_ids = None
             else:
                 print(f"[main] existing cache: {existing_embs.shape[0]} papers, dim={cached_dim}")
+                target_ids = set(all_paper_ids)
+                cached_ids = set(existing_ids)
+                orphaned = cached_ids - target_ids
+                if orphaned:
+                    print(f"[main] cache has {len(orphaned)} orphaned paper_ids. Full rebuild.")
+                    full_rebuild = True
+                    existing_embs = None
+                    existing_ids = None
         except Exception as e:
             print(f"[main] failed to load existing cache: {e}. Full rebuild.")
             full_rebuild = True
@@ -147,6 +181,10 @@ def main():
         new_indices = [i for i, pid in enumerate(all_paper_ids) if pid not in existing_set]
         if not new_indices:
             print(f"[main] cache is up-to-date, nothing to encode.")
+            print(f"[main] refreshing cache metadata for {args.accepted}")
+            save_cache(out_path, existing_embs, existing_ids, args.model, Path(args.accepted))
+            size_mb = out_path.stat().st_size / (1024 * 1024)
+            print(f"[main] saved: {out_path} ({size_mb:.1f} MB), shape: {existing_embs.shape}")
             return
         paper_ids = [all_paper_ids[i] for i in new_indices]
         texts = [all_texts[i] for i in new_indices]
@@ -213,19 +251,7 @@ def main():
         final_paper_ids = paper_ids
 
     out_path = Path(args.out)
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-    np.savez_compressed(
-        out_path,
-        embeddings=all_embeddings.astype(np.float32),
-        paper_ids=np.array(final_paper_ids, dtype=np.str_),
-        meta=json.dumps({
-            "model_name": args.model,
-            "dimension": all_embeddings.shape[1],
-            "count": len(final_paper_ids),
-            "accepted_csv_sha256": _sha256_file(Path(args.accepted)),
-            "paper_id_dtype": "str",
-        }),
-    )
+    save_cache(out_path, all_embeddings, final_paper_ids, args.model, Path(args.accepted))
     size_mb = out_path.stat().st_size / (1024 * 1024)
     print(f"[main] saved: {out_path} ({size_mb:.1f} MB), shape: {all_embeddings.shape}")
     print(f"[main] throughput: {len(texts) / elapsed:.0f} papers/s (encoded {len(texts)} new)")

@@ -17,7 +17,7 @@ for f in .localconfig/*.env.example; do
 done
 
 # 2. Edit the .env files to point at your own GPU server, paths, conda env
-# 3. Skills load these automatically via _shared/secrets.py
+# 3. Skills load these automatically via _shared/secrets_loader.py
 ```
 
 ## File index
@@ -25,10 +25,11 @@ done
 | File | Purpose | Consumed by |
 | --- | --- | --- |
 | `server.env` | Remote GPU server settings: SSH host, working directory, conda env | `resmax-embedding`, `resmax-survey` (embedding query encoding over SSH) |
+| `huggingface.env` | Hugging Face dataset package location for review-cache restore | `resmax-database/scripts/ensure_reviews_available.py` |
 
 ## Loader behaviour
 
-The same `.cursor/skills/_shared/secrets.py` loader reads these values.
+The same `.agents/skills/_shared/secrets_loader.py` loader reads these values.
 When a required variable is missing, the loader halts with a message
 that names which `.localconfig/*.env` file to populate. The agent then
 asks the user interactively and writes the value into the file.
