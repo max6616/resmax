@@ -20,6 +20,10 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Iterable
 
+SCRIPT_DIR = Path(__file__).resolve().parent
+sys.path.insert(0, str(SCRIPT_DIR))
+from review_quality import assess_review_doc, summarize_docs  # noqa: E402
+
 
 def sha256_file(path: Path) -> str:
     h = hashlib.sha256()
@@ -66,6 +70,7 @@ def read_review_summary(path: Path) -> dict:
             "json_error": f"{type(exc).__name__}: {exc}",
         }
     reviews = doc.get("reviews", []) or []
+    quality = assess_review_doc(doc)
     return {
         "json_parse_ok": "yes",
         "json_error": "",
@@ -74,6 +79,11 @@ def read_review_summary(path: Path) -> dict:
         "json_reviews_count": str(len(reviews)),
         "json_decision": str(doc.get("decision", "") or ""),
         "json_fetched_at": str(doc.get("fetched_at", "") or ""),
+        "json_text_chars": str(quality.get("text_chars", 0)),
+        "json_author_entries": str(quality.get("author_entries", 0)),
+        "json_blank_non_author_entries": str(quality.get("blank_non_author_entries", 0)),
+        "json_rating_entries": str(quality.get("rating_entries", 0)),
+        "json_confidence_entries": str(quality.get("confidence_entries", 0)),
     }
 
 
@@ -241,6 +251,7 @@ def main(argv: Iterable[str] | None = None) -> int:
 
     index_rows: list[dict] = []
     by_conf_year: dict[str, list[tuple[Path, str]]] = defaultdict(list)
+    docs_by_conf_year: dict[str, list[dict]] = defaultdict(list)
     for rel, path in sorted(json_by_rel.items()):
         conf_year = Path(rel).parts[0]
         member_path = str(Path("reviews") / rel)
@@ -248,6 +259,8 @@ def main(argv: Iterable[str] | None = None) -> int:
         archive_rel = str(Path("archives") / archive_name)
         row = expected.get(rel, {})
         summary = read_review_summary(path)
+        if summary.get("json_parse_ok") == "yes":
+            docs_by_conf_year[conf_year].append(json.loads(path.read_text(encoding="utf-8")))
         by_conf_year[conf_year].append((path, member_path))
         index_rows.append({
             "conf_year": conf_year,
@@ -295,6 +308,11 @@ def main(argv: Iterable[str] | None = None) -> int:
         "json_reviews_count",
         "json_decision",
         "json_fetched_at",
+        "json_text_chars",
+        "json_author_entries",
+        "json_blank_non_author_entries",
+        "json_rating_entries",
+        "json_confidence_entries",
     ]
 
     shards = []
@@ -318,6 +336,22 @@ def main(argv: Iterable[str] | None = None) -> int:
     parquet_path = out_dir / "reviews_index.parquet"
     parquet_written = maybe_write_parquet(parquet_path, index_rows)
 
+    review_quality = summarize_docs(docs_by_conf_year)
+    quality_violations = []
+    for conf_year, stats in review_quality.items():
+        if stats["author_entries"]:
+            quality_violations.append(
+                f"{conf_year}: author_entries {stats['author_entries']} should be filtered from reviews"
+            )
+        if stats["blank_non_author_entry_pct"] > 1.0:
+            quality_violations.append(
+                f"{conf_year}: blank_non_author_entry_pct {stats['blank_non_author_entry_pct']} > 1.0"
+            )
+        if stats["files"] and stats["files_with_text_pct"] < 95.0:
+            quality_violations.append(
+                f"{conf_year}: files_with_text_pct {stats['files_with_text_pct']} < 95.0"
+            )
+
     manifest = {
         "schema_version": 1,
         "generated_at": datetime.now(timezone.utc).isoformat(),
@@ -340,6 +374,8 @@ def main(argv: Iterable[str] | None = None) -> int:
         "archives_format": "tar.zst",
         "archives_member_root": "reviews/",
         "shards": shards,
+        "review_quality": review_quality,
+        "quality_violations": quality_violations,
     }
 
     manifest_path = out_dir / "reviews_manifest.json"
@@ -367,7 +403,11 @@ def main(argv: Iterable[str] | None = None) -> int:
         print(f"[WARN] {len(missing)} CSV review rows missing JSON files", file=sys.stderr)
     if orphaned:
         print(f"[WARN] {len(orphaned)} JSON files are not referenced by accepted_index.csv", file=sys.stderr)
-    return 0 if not missing else 1
+    if quality_violations:
+        print("[ERROR] review content quality violations:", file=sys.stderr)
+        for item in quality_violations:
+            print(f"  - {item}", file=sys.stderr)
+    return 0 if not missing and not quality_violations else 1
 
 
 if __name__ == "__main__":

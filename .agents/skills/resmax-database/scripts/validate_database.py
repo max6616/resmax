@@ -46,6 +46,10 @@ _SHARED = Path(__file__).resolve().parents[2] / "_shared"
 sys.path.insert(0, str(_SHARED))
 from data_contracts import SOURCE_TEXT_STATUS_VALUES, is_valid_abstract, review_score_status  # noqa: E402
 
+SCRIPT_DIR = Path(__file__).resolve().parent
+sys.path.insert(0, str(SCRIPT_DIR))
+from review_quality import assess_review_doc  # noqa: E402
+
 
 csv.field_size_limit(100 * 1024 * 1024)
 
@@ -534,6 +538,8 @@ def check_review_json_integrity(
     checked = 0
     missing = 0
     parse_err = 0
+    author_entries = 0
+    blank_non_author_entries = 0
     sample_missing: list[str] = []
 
     # Sample across conf_years proportionally to catch per-venue issues.
@@ -566,16 +572,22 @@ def check_review_json_integrity(
                 sample_missing.append(f"{r.get('paper_id','?')} -> {rel}")
             continue
         try:
-            json.loads(p.read_text(encoding="utf-8"))
+            doc = json.loads(p.read_text(encoding="utf-8"))
         except Exception:
             parse_err += 1
+            continue
+        quality = assess_review_doc(doc)
+        author_entries += int(quality.get("author_entries", 0))
+        blank_non_author_entries += int(quality.get("blank_non_author_entries", 0))
 
-    status = "OK" if not (missing or parse_err) else "WARN"
+    status = "OK" if not (missing or parse_err or author_entries or blank_non_author_entries) else "FAIL"
     return {
         "reviews_yes_total": len(yes_rows),
         "sampled": checked,
         "missing_files": missing,
         "parse_errors": parse_err,
+        "sample_author_entries": author_entries,
+        "sample_blank_non_author_entries": blank_non_author_entries,
         "sample_missing": sample_missing,
         "status": status,
     }
@@ -619,7 +631,7 @@ def main() -> int:
 
     hard_fail = any(
         section.get("status") == "FAIL"
-        for section in (core, coverage, embedding, registry, manifest)
+        for section in (core, coverage, embedding, registry, manifest, reviews)
     )
     overall = "FAIL" if hard_fail else "PASS"
 

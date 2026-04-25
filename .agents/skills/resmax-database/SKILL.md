@@ -49,6 +49,18 @@ python3 $SKILL_ROOT/scripts/validate_database.py \
 
 `validate_database.py` 的 JSON 报告必须用 `--out` 写文件；不要用 shell 重定向捕获 stdout/stderr，否则错误摘要会和 JSON 混在同一个文件里。
 
+review 抓取/rehydrate 后必须生成质量报告并让质量门槛参与退出码：
+
+```bash
+python3 $SKILL_ROOT/scripts/enrich_reviews.py \
+  --csv paper_database/accepted_index.csv \
+  --reviews-dir paper_database/reviews \
+  --rehydrate \
+  --quality-report paper_database/review_quality_report.json
+```
+
+默认门槛要求每个 review conf_year 的 `files_with_text_pct >= 95`、`blank_non_author_entry_pct <= 1`，且不得残留作者回复混入 review entry。失败时先对报告指出的 `conf_year` 重新运行 `enrich_reviews.py --filter <VENUE_YEAR> --skip-existing --quality-report ...`，只刷新坏缓存；不要在有质量 violation 时继续打包或上传。
+
 ## 数据契约
 
 - `paper_link`：兼容旧字段，表示论文 landing page 或原始来源链接，不保证是 PDF。

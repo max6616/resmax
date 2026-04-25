@@ -20,6 +20,8 @@ import os
 import re
 import sys
 import time
+import urllib.parse
+import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Iterable, Any
@@ -28,6 +30,10 @@ from typing import Iterable, Any
 _SHARED = Path(__file__).resolve().parents[2] / "_shared"
 sys.path.insert(0, str(_SHARED))
 from secrets_loader import MissingSecretError, require_secret  # noqa: E402
+
+SCRIPT_DIR = Path(__file__).resolve().parent
+sys.path.insert(0, str(SCRIPT_DIR))
+from review_quality import assess_review_doc, clean_reviews, review_has_payload, summarize_docs  # noqa: E402
 
 OPENREVIEW_BASEURL = "https://api2.openreview.net"
 
@@ -58,6 +64,43 @@ REVIEW_FIELDS = [
     "review_confidence_scores", "review_confidence_mean",
     "review_detail_path",
 ]
+
+TEXT_FIELD_ALIASES = {
+    "summary": (
+        "summary", "review_summary", "paper_summary", "brief_summary",
+        "summary_of_the_paper", "main_review",
+    ),
+    "strengths": (
+        "strengths", "strength", "strong_points", "claims_and_evidence",
+        "relation_to_prior_works", "other_aspects", "positive_aspects",
+    ),
+    "weaknesses": (
+        "weaknesses", "weakness", "weak_points", "negative_aspects",
+        "concerns", "issues", "requested_changes",
+    ),
+    "questions": (
+        "questions", "questions_for_authors", "questions_for_the_authors",
+        "clarifying_questions",
+    ),
+    "limitations": ("limitations", "limitation"),
+    "ethics_review": (
+        "ethics_review", "ethical_concerns", "ethical_issues", "ethics",
+        "broader_impact", "societal_impact",
+    ),
+}
+
+RATING_KEYS = (
+    "rating", "recommendation", "overall_assessment", "score",
+    "overall_recommendation", "soundness",
+)
+CONFIDENCE_KEYS = ("confidence", "reviewer_confidence")
+NON_TEXT_KEYS = {
+    "title", "authors", "authorids", "venue", "venueid", "pdf", "html",
+    "supplementary_material", "rating", "recommendation",
+    "overall_assessment", "score", "overall_recommendation", "soundness",
+    "confidence", "reviewer_confidence", "decision", "metareview",
+    "meta_review",
+}
 
 VENUE_REVIEW_CONFIG: dict[str, dict] = {
     "ICLR": {
@@ -138,35 +181,160 @@ def backfill_forum_ids(
 # Fetch reviews from OpenReview
 # ---------------------------------------------------------------------------
 
-def _extract_rating(content: dict) -> float | None:
-    for key in ("rating", "recommendation", "overall_assessment", "score",
-                 "overall_recommendation", "soundness"):
-        val = content.get(key, {})
-        if isinstance(val, dict):
-            val = val.get("value", "")
-        if val is None:
+def _note_attr(note: Any, attr: str, default: Any = None) -> Any:
+    if isinstance(note, dict):
+        return note.get(attr, default)
+    return getattr(note, attr, default)
+
+
+def _content_value(content: dict, key: str) -> Any:
+    val = content.get(key)
+    if isinstance(val, dict) and "value" in val:
+        return val.get("value")
+    return val
+
+
+def _text_value(content: dict, key: str) -> str:
+    val = _content_value(content, key)
+    if val is None:
+        return ""
+    if isinstance(val, (list, tuple)):
+        return "; ".join(str(v) for v in val if v is not None).strip()
+    if isinstance(val, dict):
+        return json.dumps(val, ensure_ascii=False, sort_keys=True)
+    return str(val).strip()
+
+
+def _first_text(content: dict, keys: Iterable[str]) -> str:
+    for key in keys:
+        val = _text_value(content, key)
+        if val:
+            return val
+    return ""
+
+
+def _extract_float(content: dict, keys: Iterable[str]) -> float | None:
+    for key in keys:
+        val = _text_value(content, key)
+        if not val:
             continue
-        match = re.match(r"^(\d+(?:\.\d+)?)", str(val).strip())
+        match = re.match(r"^\s*(\d+(?:\.\d+)?)", val)
         if match:
             return float(match.group(1))
     return None
 
 
+def _extract_rating(content: dict) -> float | None:
+    return _extract_float(content, RATING_KEYS)
+
+
 def _extract_confidence(content: dict) -> float | None:
-    val = content.get("confidence", {})
-    if isinstance(val, dict):
-        val = val.get("value", "")
-    if val is None:
+    return _extract_float(content, CONFIDENCE_KEYS)
+
+
+def _is_author_signature(signature: str) -> bool:
+    return signature == "Authors" or signature.endswith("/Authors")
+
+
+def _public_text_fields(content: dict) -> dict[str, str]:
+    out = {}
+    for key in sorted(content):
+        if key in NON_TEXT_KEYS:
+            continue
+        val = _text_value(content, key)
+        if val:
+            out[key] = val
+    return out
+
+
+def _combine_text_fields(fields: dict[str, str]) -> str:
+    chunks = []
+    for key, val in fields.items():
+        if val:
+            label = key.replace("_", " ").strip().title()
+            chunks.append(f"{label}: {val}")
+    return "\n\n".join(chunks)
+
+
+def _reviewer_id(signatures: list[str]) -> str:
+    sig = signatures[0] if signatures else ""
+    return sig.split("/")[-1] if sig else ""
+
+
+def _extract_review_entry(note: Any, scores_only: bool = False) -> dict | None:
+    content = _note_attr(note, "content", {}) or {}
+    sigs = _note_attr(note, "signatures", []) or []
+    sig0 = sigs[0] if sigs else ""
+    if _is_author_signature(sig0):
         return None
-    match = re.match(r"^(\d+(?:\.\d+)?)", str(val).strip())
-    return float(match.group(1)) if match else None
+
+    entry: dict[str, Any] = {
+        "reviewer_id": _reviewer_id(sigs),
+        "rating": _extract_rating(content),
+        "confidence": _extract_confidence(content),
+    }
+    if not scores_only:
+        for out_key, aliases in TEXT_FIELD_ALIASES.items():
+            entry[out_key] = _first_text(content, aliases)
+        content_fields = _public_text_fields(content)
+        entry["content_fields"] = content_fields
+        entry["review_text"] = _combine_text_fields(content_fields)
+    return entry if review_has_payload(entry) else None
+
+
+def _extract_meta_review(content: dict, scores_only: bool = False) -> dict | None:
+    recommendation = _first_text(
+        content, ("recommendation", "decision", "rating", "overall_recommendation")
+    )
+    content_fields = _public_text_fields(content)
+    content_text = "" if scores_only else _combine_text_fields(content_fields)
+    if not recommendation and not content_text:
+        return None
+    return {
+        "recommendation": recommendation,
+        "content": content_text,
+        "content_fields": content_fields,
+    }
+
+
+def _extract_author_comment(content: dict) -> str:
+    val = _first_text(content, ("rebuttal", "comment", "response", "reply", "author_response"))
+    return val or _combine_text_fields(_public_text_fields(content))
+
+
+def _fetch_public_notes(forum_id: str, page_size: int = 1000) -> list[dict]:
+    notes: list[dict] = []
+    offset = 0
+    while True:
+        params = urllib.parse.urlencode({
+            "forum": forum_id,
+            "limit": page_size,
+            "offset": offset,
+        })
+        url = f"{OPENREVIEW_BASEURL}/notes?{params}"
+        req = urllib.request.Request(
+            url,
+            headers={
+                "User-Agent": "resmax-review-enrichment/1.0",
+                "Accept": "application/json",
+            },
+        )
+        with urllib.request.urlopen(req, timeout=60) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+        batch = data.get("notes", []) or []
+        notes.extend(batch)
+        count = int(data.get("count") or len(notes))
+        offset += len(batch)
+        if not batch or offset >= count:
+            break
+    return notes
 
 
 def fetch_paper_reviews(
     forum_id: str, group: str, scores_only: bool = False,
 ) -> dict | None:
     try:
-        notes = _client.get_notes(forum=forum_id)
+        notes = _client.get_notes(forum=forum_id) if _client else _fetch_public_notes(forum_id)
     except Exception as exc:
         print(f"  [ERR] {exc} for forum {forum_id}")
         return None
@@ -176,69 +344,46 @@ def fetch_paper_reviews(
 
     reviews = []
     meta_review = None
+    meta_reviews = []
     rebuttals = []
     decision_note = None
 
     for note in notes:
-        invs = ";".join(note.invitations or [])
-        content = note.content or {}
+        invs = ";".join(_note_attr(note, "invitations", []) or [])
+        content = _note_attr(note, "content", {}) or {}
 
         if "Official_Review" in invs:
-            sigs = note.signatures or [""]
-            sig_tail = sigs[0].split("/")[-1] if sigs else ""
-            if sig_tail == "Authors":
-                continue
-            rating = _extract_rating(content)
-            confidence = _extract_confidence(content)
-            review_entry: dict = {
-                "reviewer_id": sig_tail,
-                "rating": rating,
-                "confidence": confidence,
-            }
-            if not scores_only:
-                for fn in ("summary", "strengths", "weaknesses",
-                           "questions", "limitations", "ethics_review"):
-                    fval = content.get(fn, {})
-                    if isinstance(fval, dict):
-                        fval = fval.get("value", "")
-                    review_entry[fn] = str(fval) if fval else ""
-            reviews.append(review_entry)
+            review_entry = _extract_review_entry(note, scores_only=scores_only)
+            if review_entry:
+                reviews.append(review_entry)
 
         elif "Meta_Review" in invs or "Decision" in invs:
-            rec = content.get("recommendation",
-                              content.get("decision", {}))
-            if isinstance(rec, dict):
-                rec = rec.get("value", "")
-            mc = content.get("metareview",
-                             content.get("content", {}))
-            if isinstance(mc, dict):
-                mc = mc.get("value", "")
             if "Meta_Review" in invs:
-                meta_review = {
-                    "recommendation": str(rec) if rec else "",
-                    "content": str(mc) if mc and not scores_only else "",
-                }
+                meta_review = _extract_meta_review(content, scores_only=scores_only)
+                if meta_review:
+                    meta_reviews.append(meta_review)
             if "Decision" in invs:
-                decision_note = str(rec) if rec else ""
+                decision_note = _first_text(
+                    content, ("decision", "recommendation", "comment", "content")
+                )
 
-        elif "Rebuttal" in invs or "Official_Comment" in invs:
-            sigs = note.signatures or [""]
-            if sigs[0].endswith("/Authors"):
-                rc = content.get("rebuttal", content.get("comment", {}))
-                if isinstance(rc, dict):
-                    rc = rc.get("value", "")
+        elif "Rebuttal" in invs or "Official_Comment" in invs or "Author_Response" in invs:
+            sigs = _note_attr(note, "signatures", []) or [""]
+            if _is_author_signature(sigs[0]):
+                rc = _extract_author_comment(content)
                 if rc and not scores_only:
                     rebuttals.append({
                         "round": len(rebuttals) + 1,
-                        "content": str(rc),
+                        "content": rc,
                     })
 
     if not reviews:
         return None
 
     return {
-        "reviews": reviews,
+        "reviews": clean_reviews(reviews),
         "meta_review": meta_review,
+        "meta_reviews": meta_reviews,
         "rebuttals": rebuttals,
         "decision_from_note": decision_note,
     }
@@ -276,6 +421,7 @@ def save_review_json(
     safe_id = re.sub(r"[^a-zA-Z0-9_-]", "_", forum_id)
     out_path = out_dir / f"{safe_id}.json"
     doc = {
+        "schema_version": 2,
         "paper_id": paper_id,
         "forum_id": forum_id,
         "venue": venue,
@@ -283,9 +429,11 @@ def save_review_json(
         "score_scale": score_scale,
         "reviews": review_data["reviews"],
         "meta_review": review_data.get("meta_review"),
+        "meta_reviews": review_data.get("meta_reviews", []),
         "rebuttals": review_data.get("rebuttals", []),
         "decision": review_data.get("decision_from_note", ""),
         "fetched_at": datetime.now(timezone.utc).isoformat(),
+        "source": "openreview_api2_public_notes",
     }
     out_path.write_text(json.dumps(doc, ensure_ascii=False, indent=2), encoding="utf-8")
     # Return a workspace-relative path when possible (CWD assumed to be repo
@@ -319,6 +467,19 @@ def _write_row_from_review_data(
     row["review_detail_path"] = rel_path
 
 
+def _review_doc_needs_refresh(doc: dict, venue: str) -> bool:
+    stats = assess_review_doc(doc)
+    if stats.get("author_entries", 0):
+        return True
+    if stats.get("blank_non_author_entries", 0):
+        return True
+    if venue == "ICML" and int(doc.get("schema_version") or 0) < 2:
+        return True
+    if stats.get("non_author_entries", 0) and not stats.get("text_chars", 0) and not stats.get("rating_entries", 0):
+        return True
+    return False
+
+
 def _load_review_json_as_row_input(json_path: Path) -> tuple[dict, str] | None:
     """Load a cached review JSON and return (review_data_dict, score_scale)."""
     try:
@@ -327,8 +488,9 @@ def _load_review_json_as_row_input(json_path: Path) -> tuple[dict, str] | None:
         print(f"  [WARN] cannot parse {json_path}: {exc}")
         return None
     review_data = {
-        "reviews": doc.get("reviews", []) or [],
+        "reviews": clean_reviews(doc.get("reviews", []) or []),
         "meta_review": doc.get("meta_review"),
+        "meta_reviews": doc.get("meta_reviews", []) or [],
         "rebuttals": doc.get("rebuttals", []) or [],
         "decision_from_note": doc.get("decision", ""),
     }
@@ -410,8 +572,29 @@ def enrich_conf_year(
             # the stage idempotent: a CSV rebuild that dropped review_* columns
             # is fixed on the next run without any network traffic.
             if json_path.exists():
-                if skip_existing and row.get("review_available") == "yes":
-                    skipped += 1
+                try:
+                    cached_doc = json.loads(json_path.read_text(encoding="utf-8"))
+                except Exception as exc:
+                    print(f"  [WARN] cannot parse {json_path}: {exc}")
+                    cached_doc = {}
+                if cached_doc and not _review_doc_needs_refresh(cached_doc, venue):
+                    if skip_existing and row.get("review_available") == "yes":
+                        skipped += 1
+                        continue
+                else:
+                    print(f"  [reviews] refresh stale/incomplete cache: {json_path}")
+                    review_data = fetch_paper_reviews(forum_id, group, scores_only)
+                    if not review_data:
+                        errors += 1
+                        continue
+                    rel_path = save_review_json(
+                        reviews_dir, conf_year, forum_id,
+                        row.get("paper_id", ""), venue, year, score_scale_default,
+                        review_data,
+                    )
+                    _write_row_from_review_data(row, review_data, rel_path, config, score_scale_default)
+                    enriched += 1
+                    time.sleep(delay)
                     continue
                 loaded = _load_review_json_as_row_input(json_path)
                 if loaded is None:
@@ -471,6 +654,84 @@ def mark_unavailable(rows: list[dict], conf_year_filter: str) -> int:
             count += 1
     print(f"[reviews] marked {count} papers as review_available=no")
     return count
+
+
+def write_quality_report(
+    rows: list[dict],
+    reviews_dir: Path,
+    conf_years: list[str],
+    report_path: Path,
+    min_files_with_text_pct: float,
+    max_blank_non_author_entry_pct: float,
+) -> tuple[dict, list[str]]:
+    docs_by_cy: dict[str, list[dict]] = {}
+    missing: list[str] = []
+    parse_errors: list[str] = []
+
+    for row in rows:
+        cy = row.get("conf_year", "")
+        if cy not in conf_years:
+            continue
+        if row.get("review_available") != "yes":
+            continue
+        forum_id = row.get("openreview_forum_id", "").strip()
+        if not forum_id:
+            continue
+        safe = re.sub(r"[^a-zA-Z0-9_-]", "_", forum_id)
+        json_path = reviews_dir / cy / f"{safe}.json"
+        if not json_path.exists():
+            missing.append(f"{row.get('paper_id', '?')} -> {json_path}")
+            continue
+        try:
+            docs_by_cy.setdefault(cy, []).append(json.loads(json_path.read_text(encoding="utf-8")))
+        except Exception as exc:
+            parse_errors.append(f"{row.get('paper_id', '?')}: {type(exc).__name__}: {exc}")
+
+    by_conf_year = summarize_docs(docs_by_cy)
+    violations = []
+    for cy, stats in by_conf_year.items():
+        if stats["files_with_text_pct"] < min_files_with_text_pct:
+            violations.append(
+                f"{cy}: files_with_text_pct {stats['files_with_text_pct']} < {min_files_with_text_pct}"
+            )
+        if stats["author_entries"]:
+            violations.append(
+                f"{cy}: author_entries {stats['author_entries']} should be filtered from reviews"
+            )
+        if stats["blank_non_author_entry_pct"] > max_blank_non_author_entry_pct:
+            violations.append(
+                f"{cy}: blank_non_author_entry_pct {stats['blank_non_author_entry_pct']} > "
+                f"{max_blank_non_author_entry_pct}"
+            )
+    if missing:
+        violations.append(f"missing review JSON files: {len(missing)}")
+    if parse_errors:
+        violations.append(f"review JSON parse errors: {len(parse_errors)}")
+
+    report = {
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "conf_years": conf_years,
+        "by_conf_year": by_conf_year,
+        "missing_json_count": len(missing),
+        "missing_json_sample": missing[:20],
+        "parse_error_count": len(parse_errors),
+        "parse_error_sample": parse_errors[:20],
+        "quality_violations": violations,
+    }
+    report_path.parent.mkdir(parents=True, exist_ok=True)
+    report_path.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
+    print(f"[quality] wrote {report_path}")
+    for cy, stats in by_conf_year.items():
+        print(
+            f"[quality] {cy}: files={stats['files']} text_pct={stats['files_with_text_pct']} "
+            f"blank_non_author_pct={stats['blank_non_author_entry_pct']} "
+            f"ratings_pct={stats['files_with_ratings_pct']}"
+        )
+    if violations:
+        print("[quality] violations:")
+        for item in violations:
+            print(f"  - {item}")
+    return report, violations
 
 
 def rehydrate_from_json(
@@ -548,7 +809,13 @@ def rehydrate_from_json(
             print(f"  [WARN] cannot parse {json_path}: {exc}")
             continue
 
-        reviews = doc.get("reviews", []) or []
+        original_reviews = doc.get("reviews", []) or []
+        reviews = clean_reviews(original_reviews)
+        if len(reviews) != len(original_reviews):
+            doc["reviews"] = reviews
+            doc["cleaned_at"] = datetime.now(timezone.utc).isoformat()
+            doc["cleaning"] = "removed author and blank review shell entries; no text was synthesized"
+            json_path.write_text(json.dumps(doc, ensure_ascii=False, indent=2), encoding="utf-8")
         ratings = [
             r.get("rating") for r in reviews
             if isinstance(r.get("rating"), (int, float))
@@ -686,6 +953,12 @@ def parse_args(argv: Iterable[str] | None = None) -> argparse.Namespace:
                         "(no network). Use after a CSV rebuild that dropped the columns.")
     p.add_argument("--repair", action="store_true",
                    help="Re-process papers with empty review_available: backfill invalid forum_ids and retry")
+    p.add_argument("--quality-report", default="",
+                   help="Write review content quality audit JSON after enrichment/rehydrate")
+    p.add_argument("--allow-quality-warnings", action="store_true",
+                   help="Do not fail when the review quality audit finds content issues")
+    p.add_argument("--min-files-with-text-pct", type=float, default=95.0)
+    p.add_argument("--max-blank-non-author-entry-pct", type=float, default=1.0)
     # CLI overrides; values from .secrets/openreview.env are picked up by
     # the loader at runtime (see main()).
     p.add_argument("--username", default="")
@@ -704,6 +977,19 @@ def main(argv: Iterable[str] | None = None) -> int:
     if args.rehydrate:
         rehydrate_from_json(rows, reviews_dir, args.filter)
         save_csv(csv_path, fieldnames, rows)
+        if args.quality_report:
+            conf_years = sorted({
+                r["conf_year"] for r in rows
+                if (not args.filter or args.filter in r.get("conf_year", ""))
+                and r.get("venue", "") in VENUE_REVIEW_CONFIG
+            })
+            _, violations = write_quality_report(
+                rows, reviews_dir, conf_years, Path(args.quality_report),
+                args.min_files_with_text_pct, args.max_blank_non_author_entry_pct,
+            )
+            if violations and not args.allow_quality_warnings:
+                print("[quality] FAIL", file=sys.stderr)
+                return 1
         print(f"[reviews] updated CSV: {csv_path}")
         return 0
 
@@ -713,30 +999,40 @@ def main(argv: Iterable[str] | None = None) -> int:
         print(f"[reviews] updated CSV: {csv_path}")
         return 0
 
-    # If the user passed --username / --password on the CLI, propagate them
-    # into os.environ so require_secret() sees them; otherwise fall through
-    # to the normal secrets loader. The loader raises MissingSecretError
-    # with a standardised payload the agent can parse.
+    # Fetching known forum_ids can use OpenReview's public notes API. Backfill
+    # and repair still need the OpenReview client because they search
+    # submissions by invitation/group.
     if args.username:
         os.environ["OPENREVIEW_USERNAME"] = args.username
     if args.password:
         os.environ["OPENREVIEW_PASSWORD"] = args.password
-    try:
-        username = require_secret(
-            "OPENREVIEW_USERNAME",
-            env_file=".secrets/openreview.env",
-            purpose="Authenticate to OpenReview API v2 to fetch review data",
-            extra_vars=["OPENREVIEW_PASSWORD"],
-        )
-        password = os.environ["OPENREVIEW_PASSWORD"]
-    except MissingSecretError as err:
-        print(str(err), file=sys.stderr, flush=True)
-        return 2
-    try:
-        _init_client(username, password)
-    except RuntimeError as exc:
-        print(f"[FATAL] {exc}", file=sys.stderr)
-        return 2
+    username = os.environ.get("OPENREVIEW_USERNAME", "")
+    password = os.environ.get("OPENREVIEW_PASSWORD", "")
+    if username and password:
+        try:
+            _init_client(username, password)
+        except RuntimeError as exc:
+            print(f"[FATAL] {exc}", file=sys.stderr)
+            return 2
+    elif args.backfill_ids or args.repair:
+        try:
+            username = require_secret(
+                "OPENREVIEW_USERNAME",
+                env_file=".secrets/openreview.env",
+                purpose="Authenticate to OpenReview API v2 to backfill review forum ids",
+                extra_vars=["OPENREVIEW_PASSWORD"],
+            )
+            password = os.environ["OPENREVIEW_PASSWORD"]
+        except MissingSecretError as err:
+            print(str(err), file=sys.stderr, flush=True)
+            return 2
+        try:
+            _init_client(username, password)
+        except RuntimeError as exc:
+            print(f"[FATAL] {exc}", file=sys.stderr)
+            return 2
+    else:
+        print("[reviews] OPENREVIEW credentials not set; using public notes API")
 
     if args.repair:
         conf_years = sorted({
@@ -752,6 +1048,14 @@ def main(argv: Iterable[str] | None = None) -> int:
             repair_failed(rows, cy, reviews_dir,
                           args.batch_size, args.delay, args.scores_only)
         save_csv(csv_path, fieldnames, rows)
+        if args.quality_report:
+            _, violations = write_quality_report(
+                rows, reviews_dir, conf_years, Path(args.quality_report),
+                args.min_files_with_text_pct, args.max_blank_non_author_entry_pct,
+            )
+            if violations and not args.allow_quality_warnings:
+                print("[quality] FAIL", file=sys.stderr)
+                return 1
         print(f"[repair] updated CSV: {csv_path}")
         return 0
 
@@ -785,9 +1089,17 @@ def main(argv: Iterable[str] | None = None) -> int:
         total_errors += err
 
     save_csv(csv_path, fieldnames, rows)
+    if args.quality_report:
+        _, violations = write_quality_report(
+            rows, reviews_dir, conf_years, Path(args.quality_report),
+            args.min_files_with_text_pct, args.max_blank_non_author_entry_pct,
+        )
+        if violations and not args.allow_quality_warnings:
+            print("[quality] FAIL", file=sys.stderr)
+            return 1
     print(f"[reviews] updated CSV: {csv_path}")
     print(f"[reviews] total: enriched={total_enriched}, skipped={total_skipped}, errors={total_errors}")
-    return 0
+    return 0 if total_errors == 0 else 1
 
 
 if __name__ == "__main__":

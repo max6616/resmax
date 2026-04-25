@@ -80,11 +80,16 @@ def _reviews_args(args) -> list[str]:
     already-cached papers are not refetched.
     """
     reviews_dir = args.reviews_dir or str(Path(args.csv).parent / "reviews")
+    quality_report = str(Path(args.csv).parent / "review_quality_report.json")
     has_creds = bool(os.environ.get("OPENREVIEW_USERNAME") and os.environ.get("OPENREVIEW_PASSWORD"))
     if has_creds:
-        return ["--reviews-dir", reviews_dir, "--skip-existing"]
+        return [
+            "--reviews-dir", reviews_dir,
+            "--skip-existing",
+            "--quality-report", quality_report,
+        ]
     # Rehydrate mode: read cached JSONs, mark unsupported venues, no network.
-    return ["--reviews-dir", reviews_dir, "--rehydrate"]
+    return ["--reviews-dir", reviews_dir, "--rehydrate", "--quality-report", quality_report]
 
 
 def _quality_args(args) -> list[str]:
