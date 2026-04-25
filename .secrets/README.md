@@ -6,6 +6,10 @@ gitignored (only `README.md` and `*.env.example` templates are tracked).
 
 > **Never commit anything here without the `.example` suffix.**
 
+Hugging Face read tokens for `max6616/resmax` are not stored here by default.
+Use `resmax-init --with-data`, `HF_TOKEN`, or `hf auth login` so the token does
+not need to be written into a project file.
+
 ## Quick start for new clones
 
 ```bash

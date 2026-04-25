@@ -73,7 +73,9 @@ resmax/
 ├── .claude/skills -> ../.agents/skills
 ├── .codex/skills  -> ../.agents/skills
 ├── .cursor/skills -> ../.agents/skills
+├── scripts/                     # 面向人的统一工具命令
 ├── paper_database/              # 完整索引 + embedding 缓存（git 忽略）
+├── cache/                        # 内部传输与缓存状态（git 忽略）
 ├── literature_research/         # 按主题的检索输出（git 忽略）
 ├── .secrets/                    # API 凭据（git 忽略，仅跟踪模板）
 ├── .localconfig/                # 机器相关配置（git 忽略，仅跟踪模板）
@@ -86,7 +88,7 @@ resmax/
 
 `.agents/skills` 是唯一 canonical skill 源目录。`.claude/skills`、`.codex/skills`、`.cursor/skills` 都是兼容 symlink，使 Claude Code、Codex、Cursor 以及其他兼容 Agent Skills 的工具能自动发现同一套 `SKILL.md`，避免复制多份脚本。
 
-> `paper_database/` 与 `literature_research/` 已被 git 忽略。`.secrets/` 与 `.localconfig/` 中仅跟踪 `*.env.example` 与 `README.md`。
+> `paper_database/`、`cache/` 与 `literature_research/` 已被 git 忽略。`.secrets/` 与 `.localconfig/` 中仅跟踪 `*.env.example` 与 `README.md`。
 
 ---
 
@@ -122,17 +124,24 @@ cd resmax
 python -m pip install -r requirements.txt
 ```
 
-### 3. 执行 `resmax-init`
+### 3. 使用 `resmax-init` 初始化
 
-```bash
-python3 .agents/skills/resmax-init/scripts/resmax_init_check.py --materialize
-```
-
-然后让 agent 使用 `resmax-init` 完成本次目标，例如：
+让 agent 使用 `resmax-init` skill 完成本次目标，例如：
 
 > 使用 `resmax-init` 将当前仓库初始化到 `survey-ready`。
 
-`resmax-init` 会说明哪些值必填、哪些可选、写入哪个文件，以及缺失的 `paper_database/` 产物应该复制、下载还是重建。真实凭据只写入 gitignore 的 `.secrets/*.env`，机器相关配置只写入 gitignore 的 `.localconfig/*.env`。完整字段说明见 [`SECRETS.md`](./SECRETS.md)。
+这个 skill 会在内部运行审计和本地模板初始化脚本，然后说明哪些值必填、哪些可选、写入哪个文件，以及缺失的 `paper_database/` 产物如何恢复。若大文件产物缺失，它只问一个数据问题：
+
+- 没有 Hugging Face read token：完全跳过私有数据仓库下载，提示从源头构建；
+- 有 read token 或已有 HF 登录态：自动从 `max6616/resmax` 下载并恢复到本地运行时目录。
+
+真实凭据只写入 gitignore 的 `.secrets/*.env`，机器相关配置只写入 gitignore 的 `.localconfig/*.env`。Hugging Face read token 默认只通过当前进程传递，除非用户主动执行 `hf auth login`。完整字段说明见 [`SECRETS.md`](./SECRETS.md)。
+
+如果不通过 agent、只想手工调试，内部入口是：
+
+```bash
+python3 .agents/skills/resmax-init/scripts/resmax_init_check.py --materialize --with-data
+```
 
 ### 4. 运行工作流 Skill
 
@@ -185,8 +194,15 @@ python3 .agents/skills/resmax-init/scripts/resmax_init_check.py --materialize
 | `literature_research/<topic>/research_index.csv` | `resmax-survey` | 主题级命中子集 |
 | `literature_research/<topic>/literature_list.md` | `resmax-survey` | 最终排序列表（含分数与理由） |
 | `literature_research/<topic>/filter_log.md` | `resmax-survey` | 过滤 / 打分流水线日志 |
+| `cache/huggingface/resmax/` | `scripts/resmax_data.py` | 内部 Hugging Face 传输镜像，包含 `accepted_index.csv`、`manifest.json`、`qwen3_8b.npz` 和压缩后的 `reviews/` |
 
 上述目录均被 git 忽略，属于可复现产物。
+
+维护者上传数据也走同一个统一命令：
+
+```bash
+python3 scripts/resmax_data.py push
+```
 
 ---
 

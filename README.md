@@ -73,7 +73,9 @@ resmax/
 ├── .claude/skills -> ../.agents/skills
 ├── .codex/skills  -> ../.agents/skills
 ├── .cursor/skills -> ../.agents/skills
+├── scripts/                     # human-facing utility commands
 ├── paper_database/              # full index + embedding cache (gitignored)
+├── cache/                        # internal transfer/cache state (gitignored)
 ├── literature_research/         # per-topic retrieval outputs (gitignored)
 ├── .secrets/                    # API credentials (gitignored, templates only)
 ├── .localconfig/                # machine-specific config (gitignored, templates only)
@@ -86,7 +88,7 @@ resmax/
 
 `.agents/skills` is the canonical skill source. `.claude/skills`, `.codex/skills`, and `.cursor/skills` are compatibility symlinks so Claude Code, Codex, Cursor, and other Agent Skills-compatible tools can auto-discover the same `SKILL.md` bundles without duplicated files.
 
-> `paper_database/` and `literature_research/` are gitignored. Inside `.secrets/` and `.localconfig/` only `*.env.example` and `README.md` are tracked.
+> `paper_database/`, `cache/`, and `literature_research/` are gitignored. Inside `.secrets/` and `.localconfig/` only `*.env.example` and `README.md` are tracked.
 
 ---
 
@@ -122,17 +124,24 @@ Use a virtualenv or conda env if you prefer.
 python -m pip install -r requirements.txt
 ```
 
-### 3. Run `resmax-init`
+### 3. Initialize with `resmax-init`
 
-```bash
-python3 .agents/skills/resmax-init/scripts/resmax_init_check.py --materialize
-```
-
-Then ask your agent to use `resmax-init` for the target you need, for example:
+Ask your agent to use the `resmax-init` skill for the target you need, for example:
 
 > Use `resmax-init` to initialize this checkout to `survey-ready`.
 
-`resmax-init` explains which values are required, which are optional, where they are stored, and how to restore or build missing `paper_database/` artifacts. Real credentials stay in gitignored `.secrets/*.env`; machine-specific settings stay in gitignored `.localconfig/*.env`. See [`SECRETS.md`](./SECRETS.md) for the full field reference.
+The skill runs the audit/materialization script internally, then explains which values are required, which are optional, where they are stored, and how to restore or build missing `paper_database/` artifacts. If large artifacts are missing, it asks one data question:
+
+- no Hugging Face read token: skip private dataset download and build from sources;
+- has read token or existing HF login: download `max6616/resmax` into the local runtime layout automatically.
+
+Real credentials stay in gitignored `.secrets/*.env`; machine-specific settings stay in gitignored `.localconfig/*.env`. Hugging Face read tokens are passed through the current process only unless the user explicitly logs in with `hf auth login`. See [`SECRETS.md`](./SECRETS.md) for the full field reference.
+
+For manual debugging without an agent, the internal entrypoint is:
+
+```bash
+python3 .agents/skills/resmax-init/scripts/resmax_init_check.py --materialize --with-data
+```
 
 ### 4. Run workflow skills
 
@@ -185,8 +194,15 @@ Loader implementation, hard-vs-soft requirements, and the agent's standard respo
 | `literature_research/<topic>/research_index.csv` | `resmax-survey` | Topic-level subset of hits |
 | `literature_research/<topic>/literature_list.md` | `resmax-survey` | Final ranked list (with scores and rationales) |
 | `literature_research/<topic>/filter_log.md` | `resmax-survey` | Filter / scoring pipeline log |
+| `cache/huggingface/resmax/` | `scripts/resmax_data.py` | Internal Hugging Face transfer mirror for `accepted_index.csv`, `manifest.json`, `qwen3_8b.npz`, and packaged `reviews/` |
 
 All of the above directories are gitignored — they are reproducible artifacts.
+
+For maintainers, the same data command handles upload preparation and upload:
+
+```bash
+python3 scripts/resmax_data.py push
+```
 
 ---
 

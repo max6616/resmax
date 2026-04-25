@@ -23,6 +23,7 @@ env/
 # === Large data / cache (not suitable for git) ===
 paper_database/
 literature_research/
+cache/
 tmp/
 
 # === Logs & temp ===

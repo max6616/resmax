@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 import argparse
+import getpass
 import json
 import os
 import re
 import shutil
 import stat
+import subprocess
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -115,8 +118,9 @@ FIELDS: tuple[Field, ...] = (
     Field(
         "RESMAX_HF_DATASET_REPO",
         ".localconfig/huggingface.env",
-        "conditional_required",
-        "download review packages from a Hugging Face dataset repo",
+        "soft_default",
+        "download Resmax large data artifacts from a Hugging Face dataset repo",
+        default="max6616/resmax",
     ),
     Field(
         "RESMAX_HF_REVIEWS_PATH",
@@ -259,17 +263,35 @@ def should_prompt_env(row: dict[str, Any], artifacts: dict[str, dict[str, Any]])
         and not artifacts.get("reviews_package_manifest", {}).get("exists")
     )
     embedding_missing = not artifacts.get("embedding_cache", {}).get("exists")
+    large_missing = any(
+        not artifacts.get(name, {}).get("exists")
+        for name in (
+            "accepted_index",
+            "manifest",
+            "embedding_cache",
+            "reviews_package_manifest",
+        )
+    )
+    if large_missing and key in {"OPENREVIEW_USERNAME", "OPENREVIEW_PASSWORD", "RESMAX_SSH_HOST"}:
+        return False, False, "defer until user chooses skip-no-token-build-from-sources"
     if key in {"OPENREVIEW_USERNAME", "OPENREVIEW_PASSWORD"}:
-        return reviews_missing, False, "only if review_source=openreview-fetch"
-    if key == "RESMAX_HF_DATASET_REPO":
-        return reviews_missing, False, "only if review_source=huggingface"
+        return reviews_missing, False, "only if building reviews from OpenReview"
     if key == "RESMAX_SSH_HOST":
-        return embedding_missing, False, "only if embedding_source=remote-build or SSH query fallback is needed"
+        return embedding_missing, False, "only if remote embedding build or SSH query fallback is needed"
     return False, False, ""
 
 
 def suggested_questions(env_rows: list[dict[str, Any]], artifact_rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
     by_artifact = {row["name"]: row for row in artifact_rows}
+    large_artifacts_missing = any(
+        not by_artifact.get(name, {}).get("exists")
+        for name in (
+            "accepted_index",
+            "manifest",
+            "embedding_cache",
+            "reviews_package_manifest",
+        )
+    )
     questions: list[dict[str, Any]] = [
         {
             "id": "init_goal",
@@ -287,34 +309,15 @@ def suggested_questions(env_rows: list[dict[str, Any]], artifact_rows: list[dict
             "recommended": "disabled",
         },
     ]
-    if not by_artifact.get("accepted_index", {}).get("exists") or not by_artifact.get("manifest", {}).get("exists"):
+    if large_artifacts_missing:
         questions.append(
             {
-                "id": "database_source",
+                "id": "large_artifact_source",
                 "type": "choice",
                 "required": True,
-                "prompt": "数据库索引缺失，使用哪种来源补齐？",
-                "options": ["local-copy", "build-from-sources", "skip-now"],
-            }
-        )
-    if not by_artifact.get("raw_review_json", {}).get("exists") and not by_artifact.get("reviews_package_manifest", {}).get("exists"):
-        questions.append(
-            {
-                "id": "review_source",
-                "type": "choice",
-                "required": False,
-                "prompt": "评审 JSON / package 缺失，如何补齐？",
-                "options": ["local-package", "huggingface", "openreview-fetch", "skip-now"],
-            }
-        )
-    if not by_artifact.get("embedding_cache", {}).get("exists"):
-        questions.append(
-            {
-                "id": "embedding_source",
-                "type": "choice",
-                "required": False,
-                "prompt": "embedding cache 缺失，如何处理？",
-                "options": ["local-copy", "remote-build", "skip-production"],
+                "prompt": "CSV / manifest / embedding / review package 缺失。是否有 max6616/resmax 私有数据仓库的 read token？",
+                "options": ["skip-no-token-build-from-sources", "use-read-token-download"],
+                "recommended": "use-read-token-download",
             }
         )
     for row in env_rows:
@@ -333,6 +336,61 @@ def suggested_questions(env_rows: list[dict[str, Any]], artifact_rows: list[dict
             }
         )
     return questions
+
+
+def large_artifacts_missing(artifact_rows: list[dict[str, Any]]) -> bool:
+    by_artifact = {row["name"]: row for row in artifact_rows}
+    return any(
+        not by_artifact.get(name, {}).get("exists")
+        for name in (
+            "accepted_index",
+            "manifest",
+            "embedding_cache",
+            "reviews_package_manifest",
+        )
+    )
+
+
+def run_data_pull(root: Path, *, repo_id: str, no_validate: bool, token: str) -> int:
+    env = os.environ.copy()
+    if token:
+        env["HF_TOKEN"] = token
+    cmd = [
+        sys.executable,
+        "scripts/resmax_data.py",
+        "pull",
+        "--repo-id",
+        repo_id,
+    ]
+    if no_validate:
+        cmd.append("--no-validate")
+    print("[data] running: " + " ".join(cmd), flush=True)
+    return subprocess.run(cmd, cwd=root, env=env, check=False).returncode
+
+
+def prompt_large_artifact_source(root: Path, *, repo_id: str, no_validate: bool) -> int:
+    print()
+    print("## Large data artifacts")
+    print(
+        "CSV / manifest / embedding / review package are missing. "
+        "Choose how to handle the private Hugging Face dataset download."
+    )
+    print("A) No read token: skip download and build the database from sources.")
+    print(f"B) I have a read token or existing HF login: download from {repo_id}.")
+    choice = input("Choose A or B [A/B]: ").strip().lower()
+    if choice != "b":
+        print()
+        print("[data] download skipped.")
+        print(
+            "[next] Build from sources with resmax-database, then build embeddings with "
+            "resmax-embedding before treating this checkout as survey-ready."
+        )
+        return 0
+
+    token = getpass.getpass(
+        "Paste HF read token (leave empty to use existing HF_TOKEN or hf auth login): "
+    ).strip()
+    return run_data_pull(root, repo_id=repo_id, no_validate=no_validate, token=token)
 
 
 def build_report(root: Path, created: list[str]) -> dict[str, Any]:
@@ -380,15 +438,45 @@ def main() -> int:
     parser.add_argument("--repo-root", default="", help="Override repository root")
     parser.add_argument("--materialize", action="store_true", help="Create missing .env files from tracked templates")
     parser.add_argument("--json", action="store_true", help="Print machine-readable JSON")
+    parser.add_argument(
+        "--with-data",
+        action="store_true",
+        help="If large artifacts are missing, ask for HF read-token flow and call scripts/resmax_data.py pull",
+    )
+    parser.add_argument(
+        "--data-repo-id",
+        default=os.environ.get("RESMAX_HF_DATASET_REPO") or "max6616/resmax",
+        help="Hugging Face dataset repo used by --with-data",
+    )
+    parser.add_argument(
+        "--data-no-validate",
+        action="store_true",
+        help="Pass --no-validate to scripts/resmax_data.py pull",
+    )
     args = parser.parse_args()
 
     root = Path(args.repo_root).resolve() if args.repo_root else find_repo_root(Path.cwd())
     created = materialize_env_files(root) if args.materialize else []
     report = build_report(root, created)
+    if args.with_data and args.json:
+        print("[ERROR] --with-data is interactive and cannot be combined with --json", file=sys.stderr)
+        return 2
     if args.json:
         print(json.dumps(report, ensure_ascii=False, indent=2))
     else:
         print_markdown(report)
+        if args.with_data and large_artifacts_missing(report["artifacts"]):
+            rc = prompt_large_artifact_source(
+                root,
+                repo_id=args.data_repo_id,
+                no_validate=args.data_no_validate,
+            )
+            if rc != 0:
+                return rc
+            print()
+            print("# resmax-init audit after data step")
+            print()
+            print_markdown(build_report(root, []))
     return 0
 
 

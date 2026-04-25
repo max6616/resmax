@@ -13,10 +13,14 @@ description: Initialize a freshly cloned Resmax checkout. Use when Codex needs t
 
 ## 固定入口
 
-先运行审计；新 clone 或模板缺失时加 `--materialize`：
+当用户要求执行 `resmax-init` skill 时，agent 先运行审计；新 clone 或模板缺失时加 `--materialize`。如果初始化目标需要同时处理大文件数据恢复，加 `--with-data`。这些命令是 skill 内部入口，不是 README 面向普通用户的主流程：
 
 ```bash
 python3 .agents/skills/resmax-init/scripts/resmax_init_check.py --materialize
+```
+
+```bash
+python3 .agents/skills/resmax-init/scripts/resmax_init_check.py --materialize --with-data
 ```
 
 需要机器可读输出时：
@@ -25,7 +29,7 @@ python3 .agents/skills/resmax-init/scripts/resmax_init_check.py --materialize
 python3 .agents/skills/resmax-init/scripts/resmax_init_check.py --materialize --json
 ```
 
-审计只创建空的本地 `.env`，不会填入密钥，不会下载数据，不会启动长任务。
+普通审计只创建空的本地 `.env`，不会填入密钥，不会下载数据，不会启动长任务。`--with-data` 是交互模式：当 `accepted_index.csv`、`manifest.json`、`qwen3_8b.npz` 或 review package 缺失时，必须先询问用户是否有 `max6616/resmax` 私有 HF dataset 的 read token。
 
 ## 问答原则
 
@@ -49,28 +53,25 @@ python3 .agents/skills/resmax-init/scripts/resmax_init_check.py --materialize --
 3. `survey-ready`：数据库和 embedding cache 都可用，可跑 `resmax-survey` 生产检索。
 4. `embedding-build`：配置远程 GPU 并构建/刷新 embedding cache。
 
-### 2. 数据库产物来源
+### 2. 大文件数据来源
 
-如果 `paper_database/accepted_index.csv` 或 `manifest.json` 缺失，问：
+如果 `paper_database/accepted_index.csv`、`paper_database/manifest.json`、`paper_database/embedding_cache/qwen3_8b.npz` 或 `paper_database/hf_export/reviews/reviews_manifest.json` 任一缺失，只问一个问题：
 
-1. `local-copy`：用户提供已有 `paper_database` 路径，复制或同步到当前仓库。
-2. `build-from-sources`：从 registry 抓取并重建，可能需要网络、依赖和较长时间。
-3. `skip-now`：本次只做配置，数据库相关 skill 暂不可生产使用。
+1. `skip-no-token-build-from-sources`：用户没有 read token，完全跳过 HF 文件下载；明确提示需要用 `resmax-database` 从头构建 CSV/reviews，再用 `resmax-embedding` 构建 `.npz`，不能把当前状态当成 `survey-ready`。
+2. `use-read-token-download`：用户有 read token，读取 token 后自动调用统一数据命令：
 
-如果 review JSON 缺失，问：
+```bash
+python3 scripts/resmax_data.py pull --repo-id max6616/resmax
+```
 
-1. `local-package`：使用本地 `paper_database/hf_export/reviews` package 还原。
-2. `huggingface`：从 HF dataset repo 下载 package；需要 `RESMAX_HF_DATASET_REPO`，私有 repo 还需要用户本机已登录 HF 或提供 `HF_TOKEN`。
-3. `openreview-fetch`：用 OpenReview 凭据重新拉取。
-4. `skip-now`：停止生产 survey，不静默当作无 review。
+token 不写入 git-tracked 文件，也不写入 `.localconfig/`；只通过本次进程环境传给下载脚本。若用户已经 `hf auth login` 或设置了 `HF_TOKEN`，token 输入可留空。
 
-### 3. Embedding 来源
+### 3. 从源头构建时的 embedding
 
-如果 `paper_database/embedding_cache/qwen3_8b.npz` 缺失，问：
+如果用户选择 `skip-no-token-build-from-sources`，CSV/reviews 需要先由 `resmax-database` 从源头构建，embedding 再按生产目标处理：
 
-1. `local-copy`：用户提供已有 `.npz` 路径。
-2. `remote-build`：配置 SSH GPU 并运行 `resmax-embedding`。
-3. `skip-production`：只允许开发 smoke 的关键词降级，不能作为生产验收。
+1. `remote-build`：配置 SSH GPU 并运行 `resmax-embedding`。
+2. `skip-production`：只允许开发 smoke 的关键词降级，不能作为生产验收。
 
 ### 4. 灰色来源策略
 
@@ -88,7 +89,7 @@ Sci-Hub 默认关闭。只有用户明确选择才可在 Stage 5.5 deepcheck 传
 
 - `OPENREVIEW_USERNAME` / `OPENREVIEW_PASSWORD`：仅在 OpenReview fetch 模式必填；`--rehydrate` / `--mark-unavailable` 不需要。
 - `RESMAX_SSH_HOST`：仅当本机无法编码 query 且需要 SSH fallback，或要远程构建 embedding 时必填。
-- `RESMAX_HF_DATASET_REPO`：仅当 review package 需要从 HF 下载时必填。
+- `RESMAX_HF_DATASET_REPO`：非密钥，默认 `max6616/resmax`；只有使用自定义 HF dataset repo 时需要修改。
 
 软依赖：
 
@@ -113,6 +114,12 @@ Sci-Hub 默认关闭。只有用户明确选择才可在 Stage 5.5 deepcheck 传
 配置完成后按目标运行：
 
 `database-ready`：
+
+```bash
+python3 scripts/resmax_data.py pull --repo-id max6616/resmax
+```
+
+如果没有 HF read token，则使用从源头构建路线：
 
 ```bash
 python3 .agents/skills/resmax-database/scripts/normalize_database.py \
@@ -144,6 +151,6 @@ python3 .agents/skills/resmax-database/scripts/validate_database.py \
 ## 终止条件
 
 - hard-required 值缺失且用户未提供：停止，不重试。
-- 用户选择 `skip-now`：停止对应生产流程，只报告下一步需要补什么。
+- 用户选择 `skip-no-token-build-from-sources`：停止 HF 下载路线，只报告从源头构建 CSV/reviews 和 embedding 的下一步。
 - 下载、checksum、CSV hash、manifest 或 validator 失败：停止并报告失败原因，不降级。
 - 用户未明确允许 Sci-Hub：不得启用 Sci-Hub fallback。

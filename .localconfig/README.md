@@ -20,12 +20,16 @@ done
 # 3. Skills load these automatically via _shared/secrets_loader.py
 ```
 
+Hugging Face read tokens are credentials, not localconfig values. Use
+`resmax-init --with-data`, `HF_TOKEN`, or `hf auth login` for private dataset
+access.
+
 ## File index
 
 | File | Purpose | Consumed by |
 | --- | --- | --- |
 | `server.env` | Remote GPU server settings: SSH host, working directory, conda env | `resmax-embedding`, `resmax-survey` (embedding query encoding over SSH) |
-| `huggingface.env` | Hugging Face dataset package location for review-cache restore | `resmax-database/scripts/ensure_reviews_available.py` |
+| `huggingface.env` | Hugging Face dataset repo/path defaults for large artifact pull and review-cache restore | `scripts/resmax_data.py`, `resmax-database/scripts/ensure_reviews_available.py` |
 
 ## Loader behaviour
 

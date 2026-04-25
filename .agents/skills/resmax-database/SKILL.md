@@ -122,6 +122,55 @@ python3 $SKILL_ROOT/scripts/package_reviews_for_hf.py \
 
 产物包括 `reviews_index.csv` / `reviews_index.parquet`、`reviews_manifest.json`、`checksums.sha256` 和 `archives/reviews_<conf_year>.tar.zst`。上传到 HF dataset repo 时保留这些文件的相对路径，避免把 `paper_database/reviews/**/*.json` 原样上传。
 
+完整 dataset repo 上传使用统一数据命令：
+
+```bash
+python3 scripts/resmax_data.py push
+```
+
+该命令会先打包 reviews，再生成与 Hugging Face 仓库结构一致的本地镜像目录，最后调用 `hf upload`。只准备镜像、不上传时使用：
+
+```bash
+python3 scripts/resmax_data.py push --prepare-only
+```
+
+内部镜像步骤等价于：
+
+```bash
+python3 $SKILL_ROOT/scripts/prepare_hf_dataset.py \
+  --out-dir cache/huggingface/resmax \
+  --hf-repo-id max6616/resmax
+```
+
+该目录默认使用硬链接整理大文件，避免重复占用磁盘；跨文件系统时自动降级为复制。生成后的目录结构与 HF dataset repo 对齐：
+
+```text
+cache/huggingface/resmax/
+├── README.md
+├── manifest.json
+├── accepted_index.csv
+├── qwen3_8b.npz
+└── reviews/
+```
+
+之后上传等价于：
+
+```bash
+hf upload max6616/resmax cache/huggingface/resmax . \
+  --repo-type dataset \
+  --commit-message "upload resmax dataset artifacts"
+```
+
+下载/恢复也使用统一数据命令：
+
+```bash
+python3 scripts/resmax_data.py pull
+```
+
+该命令从 HF dataset repo 下载 `accepted_index.csv`、`manifest.json`、`qwen3_8b.npz` 和 packaged `reviews/` 到内部 cache，再落位到 `paper_database/`，恢复 raw review JSON，并运行 validator。私有 repo 访问通过 `hf auth login`、`HF_TOKEN` 或 `resmax-init --with-data` 的交互 read-token 输入完成。
+
+保持 `paper_database/` 作为本地运行时契约目录；不要把下游 skill 默认路径整体改成 HF repo 结构。这样 validate、survey、embedding 构建仍读取稳定的本地生产路径，而上传/下载的中间态只面对 `cache/huggingface/resmax` 镜像目录。
+
 生产执行在 validate 或需要 review 信息前先调用 `ensure_reviews_available.py`。它的执行逻辑：
 
 1. 如果 `paper_database/reviews/{conf_year}/{forum_id}.json` 已覆盖 `accepted_index.csv` 中所有 `review_available=yes` 行，直接通过。

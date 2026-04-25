@@ -9,6 +9,8 @@
 numpy>=1.24.0                # resmax-embedding, resmax-survey (vector ops)
 aiohttp>=3.9.0               # resmax-database abstract fallback
 openreview-py>=1.46.0        # resmax-database review fetch mode
+huggingface_hub>=0.32.0      # scripts/resmax_data.py pull from private HF dataset repos
+zstandard>=0.22.0            # restore compressed review shards from HF package
 
 # --- GPU embedding (resmax-embedding + local query encode) --------------
 # Skip this group if you only use the remote SSH encode path and never
