@@ -33,6 +33,7 @@ source .secrets/openreview.env
 | `serpapi.env` | SerpAPI key (optional fallback for missing abstracts) | `resmax-database/scripts/enrich_abstracts_fallback.py` |
 | `s2.env` | Semantic Scholar API key (optional) | `resmax-database/scripts/enrich_code_urls.py` |
 | `contact.env` | Contact email used as API User-Agent (OpenAlex / Crossref politeness policy) | `resmax-database/scripts/enrich_abstracts_fallback.py` |
+| `deepseek.env` | DeepSeek official API key and base URL | `scripts/mcp/resmax_multimodel` |
 
 ## Loader behaviour
 

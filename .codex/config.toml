@@ -4,3 +4,11 @@ codex_hooks = true
 
 [sandbox_workspace_write]
 network_access = true
+
+[mcp_servers.resmax_multimodel]
+command = "bash"
+args = ["scripts/mcp/resmax_multimodel/run_server.sh"]
+cwd = "/Users/zhangzhao/Code/resmax"
+startup_timeout_sec = 10
+tool_timeout_sec = 180
+enabled_tools = ["deepseek_review"]
