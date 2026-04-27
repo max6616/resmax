@@ -405,6 +405,11 @@ def materialize_sources(
         "tex_count": sum(1 for row in records if "tex" in row["reader_sources_present"]),
         "md_count": sum(1 for row in records if "md" in row["reader_sources_present"]),
     }
+    web_search_replenishment = [
+        _web_search_replenishment_record(row, cache_dir)
+        for row in records
+        if not row["readable_source_ok"]
+    ]
     report = {
         "schema_version": SCHEMA_VERSION,
         "created_at": utc_now(),
@@ -417,10 +422,12 @@ def materialize_sources(
             "sci_hub_enabled": enable_sci_hub,
             "oa_api_enabled_when_identifiers_exist": not disable_oa_api,
             "title_only_oa_search": not disable_oa_api,
+            "general_web_search_required_before_degraded_fallback": True,
             "min_readable_source_coverage_for_production": 0.95,
         },
         "counts": counts,
         "records": records,
+        "web_search_replenishment": web_search_replenishment,
     }
     _write_json(pack_dir / "source_materialization_report.json", report)
     return report
@@ -517,6 +524,7 @@ def build_pack(
                     "or explicitly continue with weak/degraded abstract fallback."
                 ),
                 allowed_answers=[
+                    "perform legal general web search and replenish source cache, then rerun",
                     "replenish source cache and rerun",
                     "rerun with --enable-sci-hub only if explicitly allowed",
                     "provide approved MinerU/manual markdown cache and rerun",
@@ -534,8 +542,9 @@ def build_pack(
             raise ValueError(
                 "G2 evidence expansion gate required: readable_source_count="
                 f"{counts.get('readable_source_count', 0)}/{counts.get('selected_candidate_count', 0)}. "
-                "Inspect source_materialization_report.json, replenish sources, or explicitly pass "
-                "--allow-abstract-fallback for degraded evidence."
+                "Inspect source_materialization_report.json, run legal general web search for missing "
+                "sources, replenish the source cache, or explicitly pass --allow-abstract-fallback "
+                "for degraded evidence."
             )
     coverage = extract_evidence(
         macro_dir=macro_root,
@@ -1301,8 +1310,76 @@ def _missing_source_record(row: dict[str, str], paper_dir: Path | None, *, abstr
         "paper_dir": str(paper_dir) if paper_dir else "",
         "source_text_status": row.get("source_text_status", ""),
         "source_text_url": row.get("source_text_url", ""),
-        "hint": "Run Stage 5.5 source fetch or provide an approved cached source before stronger evidence extraction.",
+        "hint": "Run legal general web search, Stage 5.5 source fetch, or provide an approved cached source before stronger evidence extraction.",
     }
+
+
+def _web_search_replenishment_record(record: dict[str, Any], cache_dir: Path) -> dict[str, Any]:
+    title = str(record.get("title", "")).strip()
+    paper_id = str(record.get("paper_id", "")).strip()
+    doi = _diagnostic_recovered_doi(record)
+    quoted_title = f'"{title}"' if title else f'"{paper_id}"'
+    base_terms = [quoted_title, "paper", "pdf"]
+    if doi:
+        base_terms.append(doi)
+    queries = [
+        " ".join(base_terms),
+        f"{quoted_title} project page",
+        f"{quoted_title} arXiv OR OpenReview OR GitHub",
+        f"{quoted_title} author PDF",
+    ]
+    if doi:
+        queries.append(f"{doi} PDF")
+    return {
+        "paper_id": paper_id,
+        "title": title,
+        "paper_dir": record.get("paper_dir", ""),
+        "cache_dir": str(cache_dir / str(record.get("paper_dir", ""))),
+        "recovered_doi": doi,
+        "search_queries": _dedup_strings([query for query in queries if query.strip()]),
+        "acceptable_sources": [
+            "official project page",
+            "publisher landing page with open PDF",
+            "arXiv or OpenReview page",
+            "author/institutional PDF or preprint",
+            "GitHub/release page containing paper text or official PDF link",
+        ],
+        "cache_instructions": [
+            "If a legal public PDF is found, place it at paper.pdf and extract text to paper.pdftxt.",
+            "If only legal public HTML/markdown text is found, convert it to paper.md.",
+            "Record source URL provenance in the executor report before rerunning build-pack.",
+        ],
+        "disallowed_sources": [
+            "Sci-Hub unless explicitly approved by the user",
+            "paywalled PDFs without public access rights",
+            "abstract-only snippets as strong evidence",
+        ],
+    }
+
+
+def _diagnostic_recovered_doi(record: dict[str, Any]) -> str:
+    errors = record.get("errors", {})
+    if not isinstance(errors, dict):
+        return ""
+    fallback = errors.get("pdf_fallback", {})
+    if not isinstance(fallback, dict):
+        return ""
+    oa_api = fallback.get("oa_api", {})
+    if not isinstance(oa_api, dict):
+        return ""
+    return str(oa_api.get("recovered_doi", "") or "").strip()
+
+
+def _dedup_strings(items: list[str]) -> list[str]:
+    seen: set[str] = set()
+    out: list[str] = []
+    for item in items:
+        key = item.strip()
+        if not key or key in seen:
+            continue
+        seen.add(key)
+        out.append(key)
+    return out
 
 
 def _unextractable_source_record(row: dict[str, str], paper_dir: Path | None) -> dict[str, Any]:

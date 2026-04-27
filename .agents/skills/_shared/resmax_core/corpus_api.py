@@ -93,6 +93,7 @@ class PaperHit:
     embedding_score: float = 0.0
     source_tier: str = "unknown"
     source_weight: str = SourceWeight.UNKNOWN.value
+    keyword_trace: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -112,6 +113,7 @@ class RetrievalTrace:
     accepted_index_sha256: str
     embedding_cache_meta: dict[str, Any]
     query: str
+    query_payload: dict[str, Any]
     filters: dict[str, Any]
     top_k: int
     returned_paper_ids: list[str]
@@ -203,6 +205,8 @@ def search_papers(
     filters: Mapping[str, Any] | None = None,
     top_k: int = 50,
     mode: str = "keyword",
+    keyword_query: Mapping[str, Any] | None = None,
+    query_payload: Mapping[str, Any] | None = None,
     *,
     research_spec_id: str = "ad_hoc",
     query_id: str = "",
@@ -212,11 +216,11 @@ def search_papers(
     top_k = max(0, int(top_k))
 
     if clean_mode == "keyword":
-        hits, degraded_reason = _keyword_search(handle, query, filters or {}, top_k)
+        hits, degraded_reason = _keyword_search(handle, query, filters or {}, top_k, keyword_query=keyword_query)
     elif clean_mode == "embedding":
         hits, degraded_reason = _embedding_search(handle, query, filters or {}, top_k)
     elif clean_mode == "hybrid":
-        keyword_hits, keyword_degraded = _keyword_search(handle, query, filters or {}, top_k)
+        keyword_hits, keyword_degraded = _keyword_search(handle, query, filters or {}, top_k, keyword_query=keyword_query)
         embedding_hits, embedding_degraded = _embedding_search(handle, query, filters or {}, top_k)
         hits = _merge_hits(keyword_hits, embedding_hits, top_k)
         degraded_reason = "; ".join(x for x in (keyword_degraded, embedding_degraded) if x)
@@ -226,6 +230,7 @@ def search_papers(
     trace = _make_retrieval_trace(
         handle=handle,
         query=query,
+        query_payload=_trace_query_payload(query, keyword_query, query_payload),
         filters=clean_filters,
         mode=clean_mode,
         top_k=top_k,
@@ -375,28 +380,29 @@ def _keyword_search(
     query: str,
     filters: Mapping[str, Any],
     top_k: int,
+    *,
+    keyword_query: Mapping[str, Any] | None = None,
 ) -> tuple[list[PaperHit], str]:
-    terms = _query_terms(query)
-    if not terms:
+    parsed_query = _parse_keyword_query(query, keyword_query)
+    if not parsed_query["required_concepts"] and not parsed_query["boost_phrases"] and not parsed_query["optional_terms"]:
         return [], "empty keyword query"
 
-    scored: list[tuple[PaperRecord, int]] = []
+    scored: list[tuple[PaperRecord, float, int, dict[str, Any]]] = []
     for paper in handle.papers:
         if not _matches_filters(paper, filters):
             continue
-        text = _search_text(paper)
-        hits = sum(1 for term in terms if term in text)
-        if hits:
-            scored.append((paper, hits))
+        score, hit_count, trace = _score_keyword_match(paper, parsed_query)
+        if score > 0:
+            scored.append((paper, score, hit_count, trace))
 
     scored.sort(key=lambda item: (-item[1], item[0].title.lower(), item[0].paper_id))
     result: list[PaperHit] = []
-    for rank, (paper, hits) in enumerate(scored[:top_k], 1):
+    for rank, (paper, score, hits, trace) in enumerate(scored[:top_k], 1):
         result.append(
             PaperHit(
                 paper_id=paper.paper_id,
                 rank=rank,
-                score=float(hits),
+                score=float(score),
                 mode="keyword",
                 title=paper.title,
                 venue=paper.venue,
@@ -404,9 +410,150 @@ def _keyword_search(
                 keyword_hits=hits,
                 source_tier=paper.source_tier,
                 source_weight=paper.source_weight,
+                keyword_trace=trace,
             )
         )
     return result, ""
+
+
+def _parse_keyword_query(query: str, keyword_query: Mapping[str, Any] | None) -> dict[str, Any]:
+    if isinstance(keyword_query, Mapping):
+        return {
+            "required_concepts": _concept_groups(keyword_query.get("required_concepts", [])),
+            "boost_phrases": _string_list(keyword_query.get("boost_phrases", [])),
+            "optional_terms": _string_list(keyword_query.get("optional_terms", [])),
+        }
+    return {
+        "required_concepts": [],
+        "boost_phrases": [],
+        "optional_terms": _query_terms(query),
+    }
+
+
+def _concept_groups(value: Any) -> list[list[str]]:
+    groups: list[list[str]] = []
+    if not isinstance(value, Sequence) or isinstance(value, (str, bytes)):
+        return groups
+    for group in value:
+        terms = _string_list(group)
+        if terms:
+            groups.append(terms)
+    return groups
+
+
+def _string_list(value: Any) -> list[str]:
+    if isinstance(value, str):
+        values = [value]
+    elif isinstance(value, Sequence):
+        values = [str(item) for item in value]
+    else:
+        values = []
+    seen: set[str] = set()
+    result: list[str] = []
+    for item in values:
+        clean = re.sub(r"\s+", " ", item.strip().lower())
+        if clean and clean not in seen:
+            seen.add(clean)
+            result.append(clean)
+    return result
+
+
+def _score_keyword_match(paper: PaperRecord, keyword_query: Mapping[str, Any]) -> tuple[float, int, dict[str, Any]]:
+    fields = _search_fields(paper)
+    score = 0.0
+    hit_count = 0
+    matched_required: list[dict[str, Any]] = []
+    matched_phrases: list[dict[str, Any]] = []
+    matched_terms: list[dict[str, Any]] = []
+
+    for group in keyword_query["required_concepts"]:
+        best = _best_match(group, fields, base_score=3.0)
+        if best is None:
+            return 0.0, 0, {}
+        score += best["score"]
+        hit_count += 1
+        matched_required.append({"group": group, **best})
+
+    for phrase in keyword_query["boost_phrases"]:
+        match = _best_match([phrase], fields, base_score=2.0, phrase_only=True)
+        if match is not None:
+            score += match["score"]
+            hit_count += 1
+            matched_phrases.append(match)
+
+    for term in keyword_query["optional_terms"]:
+        match = _best_match([term], fields, base_score=0.5)
+        if match is not None:
+            score += match["score"]
+            hit_count += 1
+            matched_terms.append(match)
+
+    if score <= 0:
+        return 0.0, 0, {}
+    return (
+        round(score, 4),
+        hit_count,
+        {
+            "score": round(score, 4),
+            "required_concepts": matched_required,
+            "boost_phrases": matched_phrases,
+            "optional_terms": matched_terms,
+        },
+    )
+
+
+def _best_match(
+    terms: Sequence[str],
+    fields: Mapping[str, str],
+    *,
+    base_score: float,
+    phrase_only: bool = False,
+) -> dict[str, Any] | None:
+    best: dict[str, Any] | None = None
+    for term in terms:
+        clean = re.sub(r"\s+", " ", str(term).strip().lower())
+        if not clean:
+            continue
+        for field_name, field_text in fields.items():
+            if not _matches_term(clean, field_text, phrase_only=phrase_only):
+                continue
+            weighted = base_score * _field_multiplier(field_name)
+            if best is None or weighted > float(best["score"]):
+                best = {
+                    "term": clean,
+                    "field": field_name,
+                    "score": round(weighted, 4),
+                }
+    return best
+
+
+def _matches_term(term: str, field_text: str, *, phrase_only: bool) -> bool:
+    if not term or not field_text:
+        return False
+    if " " in term or phrase_only:
+        return term in field_text
+    return re.search(rf"(?<![a-z0-9]){re.escape(term)}(?![a-z0-9])", field_text) is not None
+
+
+def _search_fields(paper: PaperRecord) -> dict[str, str]:
+    return {
+        "title": _normalize_text(paper.title),
+        "keywords": _normalize_text(" ".join([paper.metadata.get("keywords_raw", ""), paper.metadata.get("topic", "")])),
+        "abstract": _normalize_text(paper.abstract_raw),
+    }
+
+
+def _field_multiplier(field_name: str) -> float:
+    if field_name == "title":
+        return 2.0
+    if field_name == "keywords":
+        return 1.5
+    return 1.0
+
+
+def _normalize_text(value: str) -> str:
+    clean = re.sub(r"[^a-z0-9+._-]+", " ", (value or "").lower())
+    return re.sub(r"\s+", " ", clean).strip()
 
 
 def _embedding_search(
@@ -483,11 +630,18 @@ def _merge_hits(keyword_hits: Sequence[PaperHit], embedding_hits: Sequence[Paper
     keyword_ids = {hit.paper_id for hit in keyword_hits}
     embedding_ids = {hit.paper_id for hit in embedding_hits}
     for hit in keyword_hits:
-        row = by_id.setdefault(hit.paper_id, {"hit": hit, "rrf": 0.0, "keyword_hits": 0, "embedding_score": 0.0})
+        row = by_id.setdefault(
+            hit.paper_id,
+            {"hit": hit, "rrf": 0.0, "keyword_hits": 0, "embedding_score": 0.0, "keyword_trace": {}},
+        )
         row["rrf"] += 1.0 / (60.0 + hit.rank)
         row["keyword_hits"] = max(int(row["keyword_hits"]), int(hit.keyword_hits or hit.score))
+        row["keyword_trace"] = hit.keyword_trace or row["keyword_trace"]
     for hit in embedding_hits:
-        row = by_id.setdefault(hit.paper_id, {"hit": hit, "rrf": 0.0, "keyword_hits": 0, "embedding_score": 0.0})
+        row = by_id.setdefault(
+            hit.paper_id,
+            {"hit": hit, "rrf": 0.0, "keyword_hits": 0, "embedding_score": 0.0, "keyword_trace": {}},
+        )
         row["rrf"] += 1.0 / (60.0 + hit.rank)
         row["embedding_score"] = max(float(row["embedding_score"]), float(hit.embedding_score or hit.score))
     merged = list(by_id.items())
@@ -505,6 +659,7 @@ def _merge_hits(keyword_hits: Sequence[PaperHit], embedding_hits: Sequence[Paper
             embedding_score=float(row["embedding_score"]),
             source_tier=row["hit"].source_tier,
             source_weight=row["hit"].source_weight,
+            keyword_trace=dict(row.get("keyword_trace") or {}),
         )
         for rank, (paper_id, row) in enumerate(merged[:top_k], 1)
     ]
@@ -514,6 +669,7 @@ def _make_retrieval_trace(
     *,
     handle: CorpusHandle,
     query: str,
+    query_payload: Mapping[str, Any],
     filters: Mapping[str, Any],
     mode: str,
     top_k: int,
@@ -523,19 +679,22 @@ def _make_retrieval_trace(
     query_id: str,
 ) -> RetrievalTrace:
     returned_ids = [hit.paper_id for hit in hits]
-    results = [
-        {
+    results = []
+    for hit in hits:
+        result = {
             "paper_id": hit.paper_id,
             "rank": hit.rank,
             "score": float(hit.score),
             "evidence_status": _evidence_status(fetch_paper(handle, hit.paper_id)),
         }
-        for hit in hits
-    ]
+        if hit.keyword_trace:
+            result["keyword_trace"] = hit.keyword_trace
+        results.append(result)
     trace_input = {
         "accepted_index_sha256": handle.accepted_index_sha256,
         "embedding_cache_meta": dict(handle.embedding_cache_meta),
         "query": query,
+        "query_payload": dict(query_payload),
         "filters": dict(filters),
         "mode": mode,
         "top_k": top_k,
@@ -560,6 +719,7 @@ def _make_retrieval_trace(
         accepted_index_sha256=handle.accepted_index_sha256,
         embedding_cache_meta=dict(handle.embedding_cache_meta),
         query=query,
+        query_payload=dict(query_payload),
         filters=dict(filters),
         top_k=top_k,
         returned_paper_ids=returned_ids,
@@ -689,6 +849,23 @@ def _field_value(paper: PaperRecord, key: str) -> Any:
 
 def _public_filters(filters: Mapping[str, Any]) -> dict[str, Any]:
     return {key: value for key, value in filters.items() if key not in {"_query_vector", "query_vector"}}
+
+
+def _trace_query_payload(
+    query: str,
+    keyword_query: Mapping[str, Any] | None,
+    query_payload: Mapping[str, Any] | None,
+) -> dict[str, Any]:
+    if isinstance(query_payload, Mapping) and query_payload:
+        return dict(query_payload)
+    payload: dict[str, Any] = {"semantic_text": query}
+    if isinstance(keyword_query, Mapping):
+        payload["keyword_query"] = {
+            "required_concepts": _concept_groups(keyword_query.get("required_concepts", [])),
+            "boost_phrases": _string_list(keyword_query.get("boost_phrases", [])),
+            "optional_terms": _string_list(keyword_query.get("optional_terms", [])),
+        }
+    return payload
 
 
 def _query_terms(query: str) -> list[str]:

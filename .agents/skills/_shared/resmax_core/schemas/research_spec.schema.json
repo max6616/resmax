@@ -4,7 +4,7 @@
   "title": "ResearchSpec",
   "schema_version": "0.1.0",
   "type": "object",
-  "required": ["schema_version", "state_id", "created_at", "input_hash", "parent_state_ids", "producer", "raw_intent", "problem_anchor", "target_venue", "timeline", "compute_budget", "team_size", "non_goals", "human_gates", "research_question", "objective", "scope", "roi_objectives", "unknowns", "decision_status"],
+  "required": ["schema_version", "state_id", "created_at", "input_hash", "parent_state_ids", "producer", "raw_intent", "problem_anchor", "search_profile", "target_venue", "timeline", "compute_budget", "team_size", "non_goals", "human_gates", "research_question", "objective", "scope", "roi_objectives", "unknowns", "decision_status"],
   "additionalProperties": false,
   "properties": {
     "schema_version": {"type": "string", "enum": ["0.1.0"]},
@@ -24,6 +24,18 @@
     },
     "raw_intent": {"type": "string", "minLength": 1},
     "problem_anchor": {"type": "string", "minLength": 1},
+    "search_profile": {
+      "type": "object",
+      "required": ["core_topic", "entities", "desired_properties", "constraints", "non_goals"],
+      "additionalProperties": false,
+      "properties": {
+        "core_topic": {"type": "string", "minLength": 1},
+        "entities": {"type": "array", "items": {"type": "string"}},
+        "desired_properties": {"type": "array", "items": {"type": "string"}},
+        "constraints": {"type": "array", "items": {"type": "string"}},
+        "non_goals": {"type": "array", "items": {"type": "string"}}
+      }
+    },
     "target_venue": {"type": "string", "minLength": 1},
     "timeline": {"type": "string", "minLength": 1},
     "compute_budget": {"type": "string", "minLength": 1},

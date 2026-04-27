@@ -11,7 +11,7 @@ from resmax_core.state import SCHEMA_VERSION, utc_now
 from resmax_core.validators.common import load_json, validate_with_schema
 
 from . import SCHEMA_ROOT
-from .plan_queries import build_query_families, write_query_families
+from .plan_queries import build_query_planner_request, write_query_planner_request
 
 
 PRODUCER = {"name": "resmax_survey_v2.compile_spec", "version": SCHEMA_VERSION, "run_id": "macro_v2"}
@@ -35,6 +35,8 @@ DEFAULT_ROI_OBJECTIVES = [
     "benchmark_leverage",
     "review_risk_visibility",
 ]
+DEFAULT_MACRO_MAX_CANDIDATES = 400
+DEFAULT_TARGETED_EVIDENCE_CANDIDATES = 50
 STOPWORDS = {
     "a",
     "an",
@@ -89,9 +91,19 @@ def build_research_spec(
     )
 
     problem_anchor = _problem_anchor(clean_intent)
+    search_profile = _build_search_profile(
+        raw_intent=clean_intent,
+        problem_anchor=problem_anchor,
+        target_venue=target_venue,
+        timeline=timeline,
+        compute_budget=compute_budget,
+        team_size=team_size,
+        non_goals=merged_non_goals,
+    )
     state_input = {
         "raw_intent": clean_intent,
         "problem_anchor": problem_anchor,
+        "search_profile": search_profile,
         "target_venue": target_venue,
         "timeline": timeline,
         "compute_budget": compute_budget,
@@ -118,8 +130,8 @@ def build_research_spec(
         "non_goals": merged_non_goals,
         "human_gates": DEFAULT_HUMAN_GATES,
         "budget_policy": {
-            "macro_max_candidates": 100,
-            "max_targeted_evidence_candidates": 30,
+            "macro_max_candidates": DEFAULT_MACRO_MAX_CANDIDATES,
+            "max_targeted_evidence_candidates": DEFAULT_TARGETED_EVIDENCE_CANDIDATES,
             "evidence_expansion_requires_human_gate": True,
         },
         "research_question": f"What broad subdirections and rough ROI signals are visible for: {clean_intent}?",
@@ -128,6 +140,7 @@ def build_research_spec(
             "included_topics": [problem_anchor],
             "excluded_topics": merged_non_goals,
         },
+        "search_profile": search_profile,
         "roi_objectives": DEFAULT_ROI_OBJECTIVES,
         "unknowns": _dedupe(unknowns),
         "decision_status": "pending",
@@ -185,19 +198,21 @@ def write_spec_pack(out_dir: Path, research_spec: dict[str, Any], source_policy:
     spec_dir.mkdir(parents=True, exist_ok=True)
     research_spec_path = spec_dir / "research_spec.json"
     source_policy_path = spec_dir / "source_policy.json"
-    query_family_path = spec_dir / "query_families.jsonl"
+    query_planner_request_path = spec_dir / "query_planner_request.json"
+    query_planner_prompt_path = spec_dir / "query_planner_prompt.md"
 
     _write_json(research_spec_path, research_spec)
     _write_json(source_policy_path, source_policy)
-    query_families = build_query_families(research_spec)
-    write_query_families(query_family_path, query_families)
+    query_planner_request = build_query_planner_request(research_spec)
+    write_query_planner_request(query_planner_request_path, query_planner_prompt_path, query_planner_request)
 
     _validate_json(research_spec_path, SCHEMA_ROOT / "research_spec.schema.json")
     _validate_json(source_policy_path, SCHEMA_ROOT / "source_policy.schema.json")
     return {
         "research_spec": research_spec_path,
         "source_policy": source_policy_path,
-        "query_families": query_family_path,
+        "query_planner_request": query_planner_request_path,
+        "query_planner_prompt": query_planner_prompt_path,
     }
 
 
@@ -224,7 +239,8 @@ def main(argv: list[str] | None = None) -> int:
     paths = write_spec_pack(args.out_dir, research_spec, source_policy)
     print(f"[survey-v2] wrote {paths['research_spec']}")
     print(f"[survey-v2] wrote {paths['source_policy']}")
-    print(f"[survey-v2] wrote {paths['query_families']}")
+    print(f"[survey-v2] wrote {paths['query_planner_request']}")
+    print(f"[survey-v2] wrote {paths['query_planner_prompt']}")
     return 0
 
 
@@ -237,6 +253,86 @@ def _problem_anchor(intent: str) -> str:
     if not words:
         return intent.strip()
     return " ".join(words[:12])
+
+
+def _build_search_profile(
+    *,
+    raw_intent: str,
+    problem_anchor: str,
+    target_venue: str,
+    timeline: str,
+    compute_budget: str,
+    team_size: str,
+    non_goals: list[str],
+) -> dict[str, Any]:
+    core_topic = _core_topic(raw_intent, problem_anchor)
+    desired_properties = _desired_properties(raw_intent)
+    constraints = _dedupe(
+        [
+            _constraint("target venue", target_venue),
+            _constraint("timeline", timeline),
+            _constraint("compute budget", compute_budget),
+            _constraint("team size", team_size),
+        ]
+    )
+    return {
+        "core_topic": core_topic,
+        "entities": _entities(raw_intent, core_topic),
+        "desired_properties": desired_properties,
+        "constraints": constraints,
+        "non_goals": non_goals,
+    }
+
+
+def _core_topic(intent: str, problem_anchor: str) -> str:
+    text = intent.lower()
+    if ("4dgs" in text or "4d gaussian" in text) and ("edit" in text or "editing" in text):
+        return "4DGS editing"
+    words = [
+        part
+        for part in re.split(r"[^A-Za-z0-9_+-]+", problem_anchor)
+        if part and part.lower() not in STOPWORDS
+    ]
+    return " ".join(words[:5]) or problem_anchor
+
+
+def _entities(intent: str, core_topic: str) -> list[str]:
+    text = intent.lower()
+    entities: list[str] = [core_topic]
+    if "4dgs" in text or "4d gaussian" in text:
+        entities.extend(["4D Gaussian Splatting", "4DGS", "3D Gaussian Splatting", "Gaussian Splatting", "dynamic scenes"])
+    if "gaussian splatting" in text and "Gaussian Splatting" not in entities:
+        entities.append("Gaussian Splatting")
+    if "nerf" in text:
+        entities.extend(["NeRF", "neural radiance fields"])
+    if "graph" in text:
+        entities.extend(["graph reasoning", "scene graph"])
+    for match in re.finditer(r"\b(?:[A-Z0-9][A-Z0-9+-]{1,}|[0-9]D[A-Za-z0-9+-]*)\b", intent):
+        entities.append(match.group(0))
+    return _dedupe(entities)
+
+
+def _desired_properties(intent: str) -> list[str]:
+    text = intent.lower()
+    candidates = [
+        ("real-time", ("real-time", "realtime", "real time")),
+        ("feed-forward", ("feed-forward", "feedforward", "feed forward")),
+        ("temporal consistency", ("temporal consistency", "temporally consistent", "temporal coherence")),
+        ("large motion editing", ("large motion", "motion editing")),
+        ("low compute", ("low compute", "low-cost", "cheap", "efficient")),
+        ("public datasets", ("public dataset", "public datasets", "open dataset")),
+        ("benchmark leverage", ("benchmark", "evaluation", "dataset")),
+        ("implementation reuse", ("code", "open source", "pretrained", "weights")),
+    ]
+    properties = [label for label, variants in candidates if any(variant in text for variant in variants)]
+    return _dedupe(properties)
+
+
+def _constraint(label: str, value: str) -> str:
+    clean = (value or "").strip()
+    if not clean or clean == "unknown":
+        return ""
+    return f"{label}: {clean}"
 
 
 def _infer_constraints(intent: str) -> dict[str, str]:

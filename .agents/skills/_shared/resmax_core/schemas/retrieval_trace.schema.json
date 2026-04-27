@@ -4,7 +4,7 @@
   "title": "RetrievalTrace",
   "schema_version": "0.1.0",
   "type": "object",
-  "required": ["schema_version", "state_id", "trace_id", "created_at", "input_hash", "parent_state_ids", "producer", "research_spec_id", "query_id", "retrieval_method", "mode", "corpus_snapshot_hash", "accepted_index_sha256", "embedding_cache_meta", "query", "filters", "top_k", "returned_paper_ids", "degraded_reason", "result_count", "results"],
+  "required": ["schema_version", "state_id", "trace_id", "created_at", "input_hash", "parent_state_ids", "producer", "research_spec_id", "query_id", "retrieval_method", "mode", "corpus_snapshot_hash", "accepted_index_sha256", "embedding_cache_meta", "query", "query_payload", "filters", "top_k", "returned_paper_ids", "degraded_reason", "result_count", "results"],
   "additionalProperties": false,
   "properties": {
     "schema_version": {"type": "string", "enum": ["0.1.0"]},
@@ -22,6 +22,7 @@
     "accepted_index_sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
     "embedding_cache_meta": {"type": "object"},
     "query": {"type": "string"},
+    "query_payload": {"type": "object"},
     "filters": {"type": "object"},
     "top_k": {"type": "integer", "minimum": 0},
     "returned_paper_ids": {"type": "array", "items": {"type": "string"}},
@@ -37,7 +38,8 @@
           "paper_id": {"type": "string", "minLength": 1},
           "rank": {"type": "integer", "minimum": 1},
           "score": {"type": "number"},
-          "evidence_status": {"type": "string", "enum": ["unknown", "not_found", "not_applicable", "insufficient_evidence", "supported", "contradicted", "mixed"]}
+          "evidence_status": {"type": "string", "enum": ["unknown", "not_found", "not_applicable", "insufficient_evidence", "supported", "contradicted", "mixed"]},
+          "keyword_trace": {"type": "object"}
         }
       }
     }

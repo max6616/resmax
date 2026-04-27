@@ -45,6 +45,8 @@ BROAD_CANDIDATE_FIELDS = [
     "rough_roi_evidence_status",
     "roi_unknowns",
     "subdirection_id",
+    "subdirection_ids",
+    "subdirection_labels",
 ]
 
 ROI_FIELDS = [

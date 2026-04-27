@@ -48,6 +48,75 @@ def _write_fixture_embedding_cache(tmp_path: Path) -> Path:
     return cache_path
 
 
+def _write_agent_query_output(out_dir: Path, raw_intent: str) -> Path:
+    path = out_dir / "survey_v2" / "spec" / "query_planner_agent_output.json"
+    families = []
+    roles = [
+        "direct_baseline",
+        "method_donor",
+        "benchmark_opportunity",
+        "implementation_reference",
+        "negative_evidence",
+        "reviewer_risk",
+        "survey_or_taxonomy",
+    ]
+    for role in roles:
+        families.append(
+            {
+                "family_role": role,
+                "information_need": f"Find {role} papers for 4DGS editing from the raw intent.",
+                "retrieval_mode": "hybrid",
+                "filters": {},
+                "queries": [
+                    {
+                        "query_id": f"q_{role}_1",
+                        "semantic_text": f"4DGS editing dynamic Gaussian Splatting temporal coherence {role}",
+                        "keyword_query": {
+                            "required_concepts": [["4DGS", "4D Gaussian Splatting", "dynamic Gaussian"], ["editing", "scene editing"]],
+                            "boost_phrases": ["4D Gaussian Splatting editing", "temporal coherence"],
+                            "optional_terms": ["benchmark", "public dataset", "real-time"],
+                        },
+                        "query_type": "semantic_and_keyword",
+                        "generation_reason": f"Traceable to raw_intent: {raw_intent}",
+                    },
+                    {
+                        "query_id": f"q_{role}_2",
+                        "semantic_text": f"feed-forward Gaussian editing dynamic scene action coherence {role}",
+                        "keyword_query": {
+                            "required_concepts": [["feed-forward", "feedforward", "one-shot"], ["Gaussian editing", "3DGS editing", "4DGS editing"]],
+                            "boost_phrases": ["feed-forward Gaussian editing", "action coherence"],
+                            "optional_terms": ["implementation", "evaluation", "visual quality"],
+                        },
+                        "query_type": "semantic_and_keyword",
+                        "generation_reason": f"Traceable to raw_intent: {raw_intent}",
+                    },
+                ],
+            }
+        )
+    payload = {"schema_version": "0.1.0", "raw_intent": raw_intent, "query_families": families}
+    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    return path
+
+
+def _plan_queries_from_agent_output(out_dir: Path, raw_intent: str) -> None:
+    agent_output = _write_agent_query_output(out_dir, raw_intent)
+    result = _run(
+        [
+            sys.executable,
+            "-m",
+            "resmax_survey_v2",
+            "plan-queries",
+            "--spec",
+            str(out_dir / "survey_v2" / "spec" / "research_spec.json"),
+            "--agent-output",
+            str(agent_output),
+            "--out",
+            str(out_dir / "survey_v2" / "spec" / "query_families.jsonl"),
+        ]
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
 def test_compile_spec_handles_missing_target_venue_and_role_queries(tmp_path: Path) -> None:
     out_dir = tmp_path / "macro"
     result = _run(
@@ -66,23 +135,91 @@ def test_compile_spec_handles_missing_target_venue_and_role_queries(tmp_path: Pa
 
     spec_path = out_dir / "survey_v2" / "spec" / "research_spec.json"
     policy_path = out_dir / "survey_v2" / "spec" / "source_policy.json"
-    query_path = out_dir / "survey_v2" / "spec" / "query_families.jsonl"
+    request_path = out_dir / "survey_v2" / "spec" / "query_planner_request.json"
+    prompt_path = out_dir / "survey_v2" / "spec" / "query_planner_prompt.md"
     spec = json.loads(spec_path.read_text(encoding="utf-8"))
     assert spec["target_venue"] == "unknown"
     assert "target_venue" in spec["unknowns"]
     assert spec["compute_budget"] == "unknown"
+    assert spec["search_profile"]["core_topic"] == "4DGS editing"
+    assert spec["budget_policy"]["macro_max_candidates"] >= 400
+    assert spec["budget_policy"]["max_targeted_evidence_candidates"] >= 50
     assert policy_path.exists()
+    assert request_path.exists()
+    assert prompt_path.exists()
+    assert not (out_dir / "survey_v2" / "spec" / "query_families.jsonl").exists()
+
+    _plan_queries_from_agent_output(out_dir, spec["raw_intent"])
 
     schema = load_json(ROOT / ".agents" / "skills" / "_shared" / "resmax_core" / "schemas" / "query_family.schema.json")
+    query_path = out_dir / "survey_v2" / "spec" / "query_families.jsonl"
     families = [json.loads(line) for line in query_path.read_text(encoding="utf-8").splitlines() if line.strip()]
     assert {family["family_role"] for family in families} >= {"direct_baseline", "reviewer_risk"}
     for family in families:
         assert family["information_need"]
         assert family["retrieval_mode"] == "hybrid"
-        assert family["queries"][0]["query_type"] == "semantic"
-        assert family["queries"][0]["intent"]
+        assert family["planner"]["raw_intent"] == spec["raw_intent"]
+        assert 2 <= len(family["queries"]) <= 4
+        assert family["queries"][0]["query_type"] == "semantic_and_keyword"
+        assert family["queries"][0]["semantic_text"]
+        assert family["queries"][0]["keyword_query"]["required_concepts"]
+        assert family["queries"][0]["keyword_query"]["boost_phrases"]
+        assert family["queries"][0]["generation_reason"]
         errors = validate_with_schema(family, schema)
         assert not errors, [error.format() for error in errors]
+
+
+def test_4dgs_editing_siggraph_4w_query_plan_is_structured(tmp_path: Path) -> None:
+    out_dir = tmp_path / "macro"
+    result = _run(
+        [
+            sys.executable,
+            "-m",
+            "resmax_survey_v2",
+            "compile-spec",
+            "--intent",
+            "4DGS editing for SIGGRAPH target in 4 weeks with 1 researcher and public datasets only",
+            "--out-dir",
+            str(out_dir),
+            "--target-venue",
+            "SIGGRAPH",
+            "--timeline",
+            "4 weeks",
+            "--team-size",
+            "1 researcher",
+        ]
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+
+    spec = json.loads((out_dir / "survey_v2" / "spec" / "research_spec.json").read_text(encoding="utf-8"))
+    assert spec["raw_intent"].startswith("4DGS editing")
+    assert spec["search_profile"]["core_topic"] == "4DGS editing"
+    assert "4D Gaussian Splatting" in spec["search_profile"]["entities"]
+    assert any("SIGGRAPH" in item for item in spec["search_profile"]["constraints"])
+    _plan_queries_from_agent_output(out_dir, spec["raw_intent"])
+
+    families = [
+        json.loads(line)
+        for line in (out_dir / "survey_v2" / "spec" / "query_families.jsonl").read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
+    assert {family["family_role"] for family in families} == {
+        "direct_baseline",
+        "method_donor",
+        "benchmark_opportunity",
+        "implementation_reference",
+        "negative_evidence",
+        "reviewer_risk",
+        "survey_or_taxonomy",
+    }
+    for family in families:
+        for query in family["queries"]:
+            assert "4DGS editing" in query["semantic_text"] or "4D Gaussian Splatting" in " ".join(
+                query["keyword_query"]["boost_phrases"]
+            )
+            assert query["keyword_query"]["required_concepts"]
+            assert query["keyword_query"]["boost_phrases"]
+            assert spec["raw_intent"] in query["generation_reason"]
 
 
 def test_retrieve_macro_generates_trace_and_low_confidence_roi(tmp_path: Path) -> None:
@@ -101,6 +238,7 @@ def test_retrieve_macro_generates_trace_and_low_confidence_roi(tmp_path: Path) -
         ]
     )
     assert compile_result.returncode == 0, compile_result.stdout + compile_result.stderr
+    _plan_queries_from_agent_output(out_dir, "4DGS editing with low compute budget")
 
     retrieve_result = _run(
         [
@@ -129,6 +267,8 @@ def test_retrieve_macro_generates_trace_and_low_confidence_roi(tmp_path: Path) -
     traces = [json.loads(line) for line in trace_path.read_text(encoding="utf-8").splitlines() if line.strip()]
     assert traces
     assert all(trace["research_spec_id"].startswith("research_spec:") for trace in traces)
+    assert all(trace["query_payload"]["semantic_text"] for trace in traces)
+    assert all("keyword_query" in trace["query_payload"] for trace in traces)
     assert any(trace["returned_paper_ids"] for trace in traces)
 
     with (out_dir / "survey_v2" / "macro" / "broad_candidates.csv").open("r", encoding="utf-8", newline="") as f:
@@ -137,6 +277,8 @@ def test_retrieve_macro_generates_trace_and_low_confidence_roi(tmp_path: Path) -
     assert all(row["rough_roi_confidence"] == "low" for row in candidates)
     assert {row["rough_roi_evidence_status"] for row in candidates} <= {"weak", "unknown", "insufficient_evidence"}
     assert all(row["query_roles"] for row in candidates)
+    assert all(row["subdirection_id"] for row in candidates)
+    assert all(row["subdirection_ids"] for row in candidates)
 
     with (out_dir / "survey_v2" / "macro" / "subdirection_roi_table.csv").open("r", encoding="utf-8", newline="") as f:
         roi_rows = list(csv.DictReader(f))
@@ -166,6 +308,7 @@ def test_retrieve_macro_can_require_query_embeddings_with_cache(tmp_path: Path) 
         ]
     )
     assert compile_result.returncode == 0, compile_result.stdout + compile_result.stderr
+    _plan_queries_from_agent_output(out_dir, "4DGS editing with low compute budget")
 
     retrieve_result = _run(
         [

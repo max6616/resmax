@@ -26,8 +26,8 @@ def retrieve_macro(
     embedding_cache: Path | None = None,
     embedding_provider: str = "none",
     require_embedding: bool = False,
-    per_query_k: int = 10,
-    max_candidates: int = 100,
+    per_query_k: int = 50,
+    max_candidates: int | None = None,
 ) -> dict[str, Any]:
     started = time.time()
     print(f"[survey-v2] retrieve start spec={spec_path} accepted={accepted_csv}", flush=True)
@@ -36,6 +36,7 @@ def retrieve_macro(
     query_families_path = query_families_path or spec_path.parent / "query_families.jsonl"
     source_policy = _load_json(source_policy_path)
     query_families = load_query_families(query_families_path)
+    effective_max_candidates = _effective_max_candidates(research_spec, max_candidates)
 
     macro_dir = out_dir / "survey_v2" / "macro"
     macro_dir.mkdir(parents=True, exist_ok=True)
@@ -87,6 +88,15 @@ def retrieve_macro(
         mode = _retrieval_mode(family)
         for query in family["queries"]:
             query_count += 1
+            semantic_text = _semantic_text(query)
+            keyword_query = _keyword_query(query)
+            query_payload = {
+                "query_id": query["query_id"],
+                "query_type": query.get("query_type", ""),
+                "semantic_text": semantic_text,
+                "keyword_query": keyword_query,
+                "generation_reason": query.get("generation_reason") or query.get("intent", ""),
+            }
             print(
                 "[survey-v2] retrieve query "
                 f"{query_count}/{total_queries} id={query['query_id']} role={family['family_role']} mode={mode}",
@@ -94,9 +104,10 @@ def retrieve_macro(
             )
             filters = dict(family.get("filters", {}))
             if mode in {"embedding", "hybrid"}:
-                embedding = query_embeddings.get(query["query_id"]) or query_embedder.encode(query["text"])
+                embedding = query_embeddings.get(query["query_id"]) or query_embedder.encode(semantic_text)
                 record = {
                     "query_id": query["query_id"],
+                    "semantic_text": semantic_text,
                     "retrieval_mode": mode,
                     "provider": embedding.provider,
                     "ok": embedding.ok,
@@ -112,10 +123,12 @@ def retrieve_macro(
                     raise RuntimeError(f"query embedding failed for {query['query_id']}: {embedding.error}")
             hits = search_papers(
                 handle,
-                query["text"],
+                semantic_text,
                 filters=filters,
                 top_k=per_query_k,
                 mode=mode,
+                keyword_query=keyword_query,
+                query_payload=query_payload,
                 research_spec_id=research_spec["state_id"],
                 query_id=query["query_id"],
             )
@@ -152,10 +165,10 @@ def retrieve_macro(
             row["paper_id"],
         )
     )
-    candidates = candidates[: max(1, max_candidates)]
+    candidates = candidates[:effective_max_candidates]
     print(
         "[survey-v2] aggregating candidates "
-        f"unique={len(aggregate)} kept={len(candidates)}",
+        f"unique={len(aggregate)} kept={len(candidates)} max_candidates={effective_max_candidates}",
         flush=True,
     )
     subdirection_map = build_subdirection_map(candidates)
@@ -177,6 +190,10 @@ def retrieve_macro(
         "query_family_count": len(query_families),
         "query_count": query_count,
         "candidate_count": len(candidates),
+        "candidate_policy": {
+            "macro_max_candidates": effective_max_candidates,
+            "per_query_k": per_query_k,
+        },
         "trace_ids": trace_ids,
         "query_embedding": {
             "provider": embedding_provider,
@@ -223,8 +240,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--embedding-cache", type=Path, default=None, help="Optional embedding cache.")
     parser.add_argument("--embedding-provider", choices=["none", "ssh", "hash"], default="none", help="Query embedding provider.")
     parser.add_argument("--require-embedding", action="store_true", help="Fail if hybrid/embedding queries cannot be encoded.")
-    parser.add_argument("--per-query-k", type=int, default=10, help="Top-K per query family query.")
-    parser.add_argument("--max-candidates", type=int, default=100, help="Maximum broad candidates after dedup.")
+    parser.add_argument("--per-query-k", type=int, default=50, help="Top-K per query family query.")
+    parser.add_argument("--max-candidates", type=int, default=None, help="Maximum broad candidates after dedup.")
     args = parser.parse_args(argv)
 
     manifest = retrieve_macro(
@@ -410,9 +427,33 @@ def _encode_semantic_queries(query_families: list[dict[str, Any]], query_embedde
         if _retrieval_mode(family) not in {"embedding", "hybrid"}:
             continue
         for query in family.get("queries", []):
-            items.append((query["query_id"], query["text"]))
+            items.append((query["query_id"], _semantic_text(query)))
     results = query_embedder.encode_many([text for _, text in items])
     return {query_id: result for (query_id, _), result in zip(items, results)}
+
+
+def _semantic_text(query: dict[str, Any]) -> str:
+    semantic_text = str(query.get("semantic_text") or query.get("text") or "").strip()
+    if not semantic_text:
+        raise ValueError(f"query {query.get('query_id', '<unknown>')} has no semantic_text/text")
+    return semantic_text
+
+
+def _keyword_query(query: dict[str, Any]) -> dict[str, Any]:
+    keyword_query = query.get("keyword_query")
+    if isinstance(keyword_query, dict):
+        return keyword_query
+    text = str(query.get("text") or query.get("semantic_text") or "").strip()
+    if not text:
+        raise ValueError(f"query {query.get('query_id', '<unknown>')} has no keyword_query/text")
+    return {"optional_terms": text.split()}
+
+
+def _effective_max_candidates(research_spec: dict[str, Any], max_candidates: int | None) -> int:
+    if max_candidates is not None:
+        return max(1, int(max_candidates))
+    spec_limit = _to_int(str(research_spec.get("budget_policy", {}).get("macro_max_candidates", "")))
+    return max(400, spec_limit, 1)
 
 
 def _load_json(path: Path) -> dict[str, Any]:

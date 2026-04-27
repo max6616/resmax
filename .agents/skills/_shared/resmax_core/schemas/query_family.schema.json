@@ -18,17 +18,54 @@
     "information_need": {"type": "string", "minLength": 1},
     "retrieval_mode": {"type": "string", "enum": ["keyword", "embedding", "hybrid", "review_cache", "metadata"]},
     "filters": {"type": "object"},
+    "planner": {
+      "type": "object",
+      "required": ["prompt", "raw_intent", "search_profile"],
+      "additionalProperties": false,
+      "properties": {
+        "prompt": {"type": "string", "minLength": 1},
+        "raw_intent": {"type": "string", "minLength": 1},
+        "search_profile": {"type": "object"}
+      }
+    },
     "queries": {
       "type": "array",
       "minItems": 1,
       "items": {
         "type": "object",
-        "required": ["query_id", "text", "query_type", "intent"],
+        "required": ["query_id", "semantic_text", "keyword_query", "query_type", "generation_reason"],
         "additionalProperties": false,
         "properties": {
           "query_id": {"type": "string", "minLength": 1},
           "text": {"type": "string", "minLength": 1},
-          "query_type": {"type": "string", "enum": ["keyword", "semantic", "citation", "review_cache", "metadata"]},
+          "semantic_text": {"type": "string", "minLength": 1},
+          "keyword_query": {
+            "type": "object",
+            "required": ["required_concepts", "boost_phrases"],
+            "additionalProperties": false,
+            "properties": {
+              "required_concepts": {
+                "type": "array",
+                "minItems": 1,
+                "items": {
+                  "type": "array",
+                  "minItems": 1,
+                  "items": {"type": "string", "minLength": 1}
+                }
+              },
+              "boost_phrases": {
+                "type": "array",
+                "minItems": 1,
+                "items": {"type": "string", "minLength": 1}
+              },
+              "optional_terms": {
+                "type": "array",
+                "items": {"type": "string", "minLength": 1}
+              }
+            }
+          },
+          "query_type": {"type": "string", "enum": ["semantic_and_keyword", "keyword", "semantic", "citation", "review_cache", "metadata"]},
+          "generation_reason": {"type": "string", "minLength": 1},
           "intent": {"type": "string", "minLength": 1}
         }
       }

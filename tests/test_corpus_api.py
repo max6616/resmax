@@ -77,6 +77,37 @@ def test_retrieval_trace_matches_schema(tmp_path: Path) -> None:
     assert rows[0]["returned_paper_ids"] == ["p-scene-graph", "p-graph-diffusion"]
 
 
+def test_structured_keyword_query_requires_concept_groups_and_traces_hits(tmp_path: Path) -> None:
+    trace_path = tmp_path / "retrieval_trace.jsonl"
+    handle = load_corpus(FIXTURE, reviews_dir=REVIEWS, trace_path=trace_path)
+
+    hits = search_papers(
+        handle,
+        "graph benchmark retrieval",
+        top_k=3,
+        mode="keyword",
+        keyword_query={
+            "required_concepts": [["graph", "scene graph"], ["benchmark", "evaluation", "dataset"]],
+            "boost_phrases": ["scene graph", "graph diffusion"],
+            "optional_terms": ["planning", "control"],
+        },
+        query_payload={
+            "semantic_text": "graph benchmark retrieval",
+            "keyword_query": {
+                "required_concepts": [["graph", "scene graph"], ["benchmark", "evaluation", "dataset"]],
+                "boost_phrases": ["scene graph", "graph diffusion"],
+                "optional_terms": ["planning", "control"],
+            },
+        },
+    )
+
+    assert [hit.paper_id for hit in hits] == ["p-graph-diffusion"]
+    assert hits[0].keyword_trace["required_concepts"]
+    trace = json.loads(trace_path.read_text(encoding="utf-8"))
+    assert trace["query_payload"]["keyword_query"]["required_concepts"]
+    assert trace["results"][0]["keyword_trace"]["boost_phrases"]
+
+
 def test_embedding_cache_missing_returns_degraded_trace(tmp_path: Path) -> None:
     missing_cache = tmp_path / "missing_embedding_cache.npz"
     trace_path = tmp_path / "retrieval_trace.jsonl"
