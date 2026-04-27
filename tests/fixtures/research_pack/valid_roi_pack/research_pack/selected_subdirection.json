@@ -1,0 +1,67 @@
+{
+  "auto_selected": true,
+  "candidate_limit": 30,
+  "description": "Macro-level graph reasoning cluster for Phase 3 fixture smoke.",
+  "label": "Graph reasoning and planning",
+  "paper_count": 3,
+  "research_spec_id": "research_spec:11111111",
+  "roi_snapshot": {
+    "baseline_burden": "unknown",
+    "benchmark_burden": "weak",
+    "compute_burden": "unknown",
+    "difficulty_signals": "baseline_burden_unknown|compute_burden_unknown|implementation_reference_unknown",
+    "evidence_status": "weak",
+    "label": "Graph reasoning and planning",
+    "paper_count": "3",
+    "positive_signals": "benchmark_mentions|implementation_reuse|recent_top_venue",
+    "representative_papers": "p-scene-graph|p-graph-diffusion",
+    "reviewer_risk": "unknown",
+    "roi_unknowns": "baseline_burden|compute_burden|reviewer_risk",
+    "rough_roi_confidence": "low",
+    "subdirection_id": "sdir_graph_reasoning"
+  },
+  "schema_version": "0.1.0",
+  "selected_at": "2026-04-27T03:52:57Z",
+  "selected_candidate_ids": [
+    "p-scene-graph",
+    "p-graph-diffusion",
+    "p-language-agent"
+  ],
+  "selected_candidates": [
+    {
+      "paper_id": "p-scene-graph",
+      "roi_unknowns": "compute_burden|baseline_burden|reviewer_risk",
+      "rough_difficulty_signal": "implementation_reference_unknown|compute_burden_unknown",
+      "rough_positive_signal": "recent_top_venue|benchmark_mentions",
+      "source_text_status": "pdf_available",
+      "source_weight": "primary",
+      "title": "Scene Graph Transformers",
+      "venue": "CVPR",
+      "year": "2025"
+    },
+    {
+      "paper_id": "p-graph-diffusion",
+      "roi_unknowns": "compute_burden|baseline_burden|reviewer_risk",
+      "rough_difficulty_signal": "compute_burden_unknown|baseline_burden_unknown",
+      "rough_positive_signal": "recent_top_venue|implementation_reuse|benchmark_mentions",
+      "source_text_status": "pdf_available",
+      "source_weight": "primary",
+      "title": "Graph Diffusion Planning",
+      "venue": "ICLR",
+      "year": "2024"
+    },
+    {
+      "paper_id": "p-language-agent",
+      "roi_unknowns": "benchmark_burden|compute_burden|baseline_burden|reviewer_risk",
+      "rough_difficulty_signal": "compute_burden_unknown|baseline_burden_unknown",
+      "rough_positive_signal": "recent_top_venue|implementation_reuse",
+      "source_text_status": "official_landing_only",
+      "source_weight": "secondary",
+      "title": "Language Agent Tool Use",
+      "venue": "NeurIPS",
+      "year": "2024"
+    }
+  ],
+  "selected_subdirection_id": "sdir_graph_reasoning",
+  "selection_method": "auto_top_rough_roi"
+}

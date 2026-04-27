@@ -1,0 +1,20 @@
+{
+  "schema_version": "0.1.0",
+  "state_id": "research_pack:99999999",
+  "created_at": "2026-04-27T00:08:00Z",
+  "input_hash": "sha256:9999999999999999999999999999999999999999999999999999999999999999",
+  "parent_state_ids": ["research_spec:11111111", "gap_map:88888888"],
+  "producer": {"name": "phase0-fixture", "version": "0.1.0", "run_id": "fixture"},
+  "pack_id": "pack-1",
+  "research_spec_id": "research_spec:11111111",
+  "artifacts": [
+    {"kind": "research_spec", "path": "research_spec.json", "schema": "research_spec.schema.json"},
+    {"kind": "query_family", "path": "query_family.json", "schema": "query_family.schema.json"},
+    {"kind": "retrieval_trace", "path": "retrieval_trace.jsonl", "schema": "retrieval_trace.schema.json"},
+    {"kind": "evidence_span", "path": "evidence_span.json", "schema": "evidence_span.schema.json"},
+    {"kind": "evidence_card", "path": "evidence_card.json", "schema": "evidence_card.schema.json"},
+    {"kind": "claim_graph", "path": "claim_graph.json", "schema": "claim_graph.schema.json"},
+    {"kind": "gap_map", "path": "gap_map.json", "schema": "gap_map.schema.json"}
+  ],
+  "decision_status": "pending"
+}

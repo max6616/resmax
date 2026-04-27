@@ -1,0 +1,78 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "resmax://schemas/review_trace",
+  "title": "ReviewTrace",
+  "schema_version": "0.1.0",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "state_id",
+    "created_at",
+    "input_hash",
+    "parent_state_ids",
+    "producer",
+    "review_id",
+    "idea_id",
+    "reviewer_role",
+    "reviewer_model",
+    "generator_model",
+    "review_independence_confidence",
+    "prompt",
+    "prompt_hash",
+    "evidence_package_hash",
+    "raw_response",
+    "blockers",
+    "recommended_status"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {"type": "string", "enum": ["0.1.0"]},
+    "state_id": {"type": "string", "pattern": "^[a-z][a-z0-9_]*:[0-9a-f]{8,64}$"},
+    "created_at": {"type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}T"},
+    "input_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "parent_state_ids": {"type": "array", "items": {"type": "string"}},
+    "producer": {"type": "object", "required": ["name"], "additionalProperties": false, "properties": {"name": {"type": "string", "minLength": 1}, "version": {"type": "string"}, "run_id": {"type": "string"}}},
+    "review_id": {"type": "string", "minLength": 1},
+    "review_trace_id": {"type": "string", "minLength": 1},
+    "idea_id": {"type": "string", "minLength": 1},
+    "idea_card_id": {"type": "string", "minLength": 1},
+    "reviewer_role": {"type": "string", "minLength": 1},
+    "reviewer_model": {"type": "string", "minLength": 1},
+    "generator_model": {"type": "string", "minLength": 1},
+    "review_independence_confidence": {"type": "string", "enum": ["high", "medium", "low", "unknown"]},
+    "fallback_reason": {"type": "string"},
+    "prompt": {"type": "string", "minLength": 1},
+    "prompt_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "evidence_package_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "raw_response": {"type": "string", "minLength": 1},
+    "raw_review": {"type": "string", "minLength": 1},
+    "blockers": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["blocker_type", "severity", "evidence_status", "evidence_ids", "explanation"],
+        "additionalProperties": false,
+        "properties": {
+          "blocker_type": {"type": "string", "minLength": 1},
+          "severity": {"type": "string", "enum": ["fatal", "major", "minor", "none"]},
+          "evidence_status": {"type": "string", "enum": ["supported", "unsupported", "unknown", "not_applicable"]},
+          "evidence_ids": {"type": "array", "items": {"type": "string"}},
+          "explanation": {"type": "string", "minLength": 1}
+        }
+      }
+    },
+    "scores": {
+      "type": "object",
+      "required": ["novelty", "feasibility", "evidence_confidence", "review_risk"],
+      "additionalProperties": false,
+      "properties": {
+        "novelty": {"type": "integer", "minimum": 0, "maximum": 5},
+        "feasibility": {"type": "integer", "minimum": 0, "maximum": 5},
+        "evidence_confidence": {"type": "integer", "minimum": 0, "maximum": 5},
+        "review_risk": {"type": "integer", "minimum": 0, "maximum": 5}
+      }
+    },
+    "recommended_status": {"type": "string", "enum": ["promote", "revise", "kill", "human_gate"]},
+    "decision_status": {"type": "string", "enum": ["unknown", "pending", "promoted", "rejected", "needs_revision", "killed", "not_applicable"]}
+  }
+}

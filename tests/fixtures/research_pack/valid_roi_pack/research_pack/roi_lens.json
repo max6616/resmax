@@ -1,0 +1,416 @@
+{
+  "created_at": "2026-04-27T04:46:02Z",
+  "decision_policy": {
+    "reviewer_policy": "reviewers detect blockers; notes do not become ideas directly",
+    "single_roi_score_allowed": false,
+    "unknown_policy": "unknowns reduce confidence and emit follow-up retrieval targets"
+  },
+  "difficulty_dimensions": [
+    "sota_pressure",
+    "baseline_burden",
+    "compute_cost",
+    "data_friction",
+    "engineering_risk",
+    "timeline_risk",
+    "review_risk"
+  ],
+  "gap_roi": [
+    {
+      "confidence": "low",
+      "decision_support": {
+        "dominant_decision_reason": "not_applicable",
+        "rank_basis": "dimension_vector_with_blockers_and_unknowns",
+        "single_roi_score": null
+      },
+      "description": "Evidence suggests a resource or compute-cost angle inside Graph reasoning and planning.",
+      "difficulty_signals": {
+        "baseline_burden": {
+          "inferred": true,
+          "refs": [],
+          "value": "unknown"
+        },
+        "compute_cost": {
+          "inferred": true,
+          "refs": [
+            "baseline_burden_unknown",
+            "compute_burden_unknown",
+            "implementation_reference_unknown"
+          ],
+          "value": "unknown"
+        },
+        "data_friction": {
+          "inferred": false,
+          "refs": [],
+          "value": "medium"
+        },
+        "engineering_risk": {
+          "inferred": false,
+          "refs": [
+            "method_donor",
+            "benchmark_opportunity",
+            "negative_evidence",
+            "visualization_reference"
+          ],
+          "value": "medium"
+        },
+        "review_risk": {
+          "inferred": true,
+          "refs": [],
+          "value": "unknown"
+        },
+        "sota_pressure": {
+          "inferred": false,
+          "refs": [
+            "CVPR"
+          ],
+          "value": "medium"
+        },
+        "timeline_risk": {
+          "inferred": false,
+          "refs": [
+            "supported"
+          ],
+          "value": "low"
+        }
+      },
+      "gap_id": "gap:b110438b12376010",
+      "gap_type": "resource_arbitrage",
+      "positive_signals": {
+        "benchmark_leverage": {
+          "inferred": false,
+          "refs": [
+            "method_donor",
+            "benchmark_opportunity",
+            "negative_evidence",
+            "visualization_reference"
+          ],
+          "value": "medium"
+        },
+        "evidence_confidence": {
+          "inferred": false,
+          "refs": [
+            "evidence_card:887d7bcaa96d5497",
+            "evidence_card:c39e0573d1607454"
+          ],
+          "value": "medium"
+        },
+        "implementation_reuse": {
+          "inferred": false,
+          "refs": [
+            "method_donor",
+            "benchmark_opportunity",
+            "negative_evidence",
+            "visualization_reference"
+          ],
+          "value": "medium"
+        },
+        "information_gap": {
+          "inferred": false,
+          "refs": [
+            "baseline_burden",
+            "compute_burden",
+            "reviewer_risk"
+          ],
+          "value": "high"
+        },
+        "novelty_headroom": {
+          "inferred": false,
+          "refs": [
+            "resource_arbitrage"
+          ],
+          "value": "medium"
+        },
+        "publication_upside": {
+          "inferred": false,
+          "refs": [
+            "recent_top_venue",
+            "benchmark_mentions",
+            "implementation_reuse"
+          ],
+          "value": "medium"
+        },
+        "story_clarity": {
+          "inferred": false,
+          "refs": [
+            "Evidence suggests a resource or compute-cost angle inside Graph reasoning and planning."
+          ],
+          "value": "medium"
+        }
+      },
+      "reviewer_blockers": [],
+      "scope": "sdir_graph_reasoning",
+      "unknowns": [
+        {
+          "confidence_impact": "lowers_gap_roi_confidence",
+          "field": "baseline_burden",
+          "follow_up_retrieval_target": "extract compared baselines and missing SOTA checks for p-scene-graph",
+          "reason": "unknown preserved as uncertainty, not converted to zero"
+        },
+        {
+          "confidence_impact": "lowers_gap_roi_confidence",
+          "field": "compute_burden",
+          "follow_up_retrieval_target": "extract compute budget, runtime, and hardware cost for p-scene-graph",
+          "reason": "unknown preserved as uncertainty, not converted to zero"
+        },
+        {
+          "confidence_impact": "lowers_gap_roi_confidence",
+          "field": "reviewer_risk",
+          "follow_up_retrieval_target": "fetch review cache and meta-review objections for p-scene-graph",
+          "reason": "unknown preserved as uncertainty, not converted to zero"
+        },
+        {
+          "confidence_impact": "lowers_gap_roi_confidence",
+          "field": "reviewer_pressure",
+          "follow_up_retrieval_target": "fetch review cache and meta-review objections for p-scene-graph",
+          "reason": "unknown preserved as uncertainty, not converted to zero"
+        }
+      ]
+    },
+    {
+      "confidence": "low",
+      "decision_support": {
+        "dominant_decision_reason": "not_applicable",
+        "rank_basis": "dimension_vector_with_blockers_and_unknowns",
+        "single_roi_score": null
+      },
+      "description": "Full-text coverage is incomplete for Graph reasoning and planning; missing papers must be resolved before stronger claims.",
+      "difficulty_signals": {
+        "baseline_burden": {
+          "inferred": false,
+          "refs": [
+            "baseline",
+            "efficiency",
+            "reproducibility"
+          ],
+          "value": "high"
+        },
+        "compute_cost": {
+          "inferred": false,
+          "refs": [
+            "baseline_burden_unknown",
+            "source_coverage_incomplete",
+            "compute_burden_unknown",
+            "implementation_reference_unknown"
+          ],
+          "value": "high"
+        },
+        "data_friction": {
+          "inferred": false,
+          "refs": [
+            "baseline",
+            "efficiency",
+            "reproducibility"
+          ],
+          "value": "low"
+        },
+        "engineering_risk": {
+          "inferred": false,
+          "refs": [
+            "method_donor",
+            "benchmark_opportunity",
+            "negative_evidence",
+            "visualization_reference",
+            "direct_baseline",
+            "method_donor",
+            "benchmark_opportunity",
+            "dataset_source",
+            "implementation_reference",
+            "negative_evidence",
+            "reviewer_expectation_reference",
+            "direct_baseline",
+            "benchmark_opportunity",
+            "implementation_reference"
+          ],
+          "value": "low"
+        },
+        "review_risk": {
+          "inferred": false,
+          "refs": [
+            "reviewer_pressure_note:dad47ede04b4b6a6",
+            "reviewer_pressure_note:9d64bd3f7e8c567d",
+            "reviewer_pressure_note:65c25df053f23cbf",
+            "reviewer_pressure_note:1c99a5a7c10d2457"
+          ],
+          "value": "medium"
+        },
+        "sota_pressure": {
+          "inferred": false,
+          "refs": [
+            "CVPR",
+            "ICLR",
+            "NeurIPS"
+          ],
+          "value": "medium"
+        },
+        "timeline_risk": {
+          "inferred": false,
+          "refs": [
+            "insufficient_evidence"
+          ],
+          "value": "medium"
+        }
+      },
+      "gap_id": "gap:cec70bb389af71f4",
+      "gap_type": "missing_evidence",
+      "positive_signals": {
+        "benchmark_leverage": {
+          "inferred": false,
+          "refs": [
+            "method_donor",
+            "benchmark_opportunity",
+            "negative_evidence",
+            "visualization_reference",
+            "direct_baseline",
+            "method_donor",
+            "benchmark_opportunity",
+            "dataset_source",
+            "implementation_reference",
+            "negative_evidence",
+            "reviewer_expectation_reference",
+            "direct_baseline",
+            "benchmark_opportunity",
+            "implementation_reference"
+          ],
+          "value": "medium"
+        },
+        "evidence_confidence": {
+          "inferred": true,
+          "refs": [],
+          "value": "unknown"
+        },
+        "implementation_reuse": {
+          "inferred": false,
+          "refs": [
+            "method_donor",
+            "benchmark_opportunity",
+            "negative_evidence",
+            "visualization_reference",
+            "direct_baseline",
+            "method_donor",
+            "benchmark_opportunity",
+            "dataset_source",
+            "implementation_reference",
+            "negative_evidence",
+            "reviewer_expectation_reference",
+            "direct_baseline",
+            "benchmark_opportunity",
+            "implementation_reference"
+          ],
+          "value": "medium"
+        },
+        "information_gap": {
+          "inferred": false,
+          "refs": [
+            "baseline_burden",
+            "compute_burden",
+            "reviewer_risk",
+            "full_text_availability"
+          ],
+          "value": "high"
+        },
+        "novelty_headroom": {
+          "inferred": true,
+          "refs": [
+            "missing_evidence"
+          ],
+          "value": "unknown"
+        },
+        "publication_upside": {
+          "inferred": false,
+          "refs": [
+            "recent_top_venue",
+            "benchmark_mentions",
+            "implementation_reuse"
+          ],
+          "value": "medium"
+        },
+        "story_clarity": {
+          "inferred": false,
+          "refs": [
+            "Full-text coverage is incomplete for Graph reasoning and planning; missing papers must be resolved before stronger claims."
+          ],
+          "value": "low"
+        }
+      },
+      "reviewer_blockers": [
+        {
+          "note_id": "reviewer_pressure_note:dad47ede04b4b6a6",
+          "objection_type": "reproducibility",
+          "severity": "medium",
+          "source_review_id": "forum-graph:Reviewer_B:weaknesses"
+        },
+        {
+          "note_id": "reviewer_pressure_note:9d64bd3f7e8c567d",
+          "objection_type": "baseline",
+          "severity": "medium",
+          "source_review_id": "forum-graph:Reviewer_A:weaknesses"
+        },
+        {
+          "note_id": "reviewer_pressure_note:65c25df053f23cbf",
+          "objection_type": "efficiency",
+          "severity": "medium",
+          "source_review_id": "forum-graph:Reviewer_A:questions"
+        },
+        {
+          "note_id": "reviewer_pressure_note:1c99a5a7c10d2457",
+          "objection_type": "reproducibility",
+          "severity": "medium",
+          "source_review_id": "forum-graph:Reviewer_B:summary"
+        }
+      ],
+      "scope": "sdir_graph_reasoning",
+      "unknowns": [
+        {
+          "confidence_impact": "lowers_gap_roi_confidence",
+          "field": "baseline_burden",
+          "follow_up_retrieval_target": "extract compared baselines and missing SOTA checks for p-scene-graph,p-graph-diffusion,p-language-agent",
+          "reason": "unknown preserved as uncertainty, not converted to zero"
+        },
+        {
+          "confidence_impact": "lowers_gap_roi_confidence",
+          "field": "compute_burden",
+          "follow_up_retrieval_target": "extract compute budget, runtime, and hardware cost for p-scene-graph,p-graph-diffusion,p-language-agent",
+          "reason": "unknown preserved as uncertainty, not converted to zero"
+        },
+        {
+          "confidence_impact": "lowers_gap_roi_confidence",
+          "field": "reviewer_risk",
+          "follow_up_retrieval_target": "fetch review cache and meta-review objections for p-scene-graph,p-graph-diffusion,p-language-agent",
+          "reason": "unknown preserved as uncertainty, not converted to zero"
+        },
+        {
+          "confidence_impact": "lowers_gap_roi_confidence",
+          "field": "full_text_availability",
+          "follow_up_retrieval_target": "retrieve missing ROI evidence field full_text_availability for p-scene-graph,p-graph-diffusion,p-language-agent",
+          "reason": "unknown preserved as uncertainty, not converted to zero"
+        },
+        {
+          "confidence_impact": "lowers_gap_roi_confidence",
+          "field": "benchmark_burden",
+          "follow_up_retrieval_target": "extract benchmark datasets, metrics, and evaluation protocol for p-scene-graph,p-graph-diffusion,p-language-agent",
+          "reason": "unknown preserved as uncertainty, not converted to zero"
+        }
+      ]
+    }
+  ],
+  "input_hash": "sha256:74f0cb66cc8e2d12c21cc854e5bef205393ca8e6d252965c56faa377890005e3",
+  "parent_state_ids": [
+    "gap_map:4a163370f4fedd2c"
+  ],
+  "positive_dimensions": [
+    "publication_upside",
+    "novelty_headroom",
+    "evidence_confidence",
+    "benchmark_leverage",
+    "implementation_reuse",
+    "story_clarity",
+    "information_gap"
+  ],
+  "producer": {
+    "name": "resmax_survey_v2.phase4_roi",
+    "run_id": "phase4",
+    "version": "0.1.0"
+  },
+  "schema_version": "0.1.0",
+  "state_id": "roi_lens:b8a99424f1740a7a"
+}

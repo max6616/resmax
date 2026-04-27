@@ -1,0 +1,221 @@
+{
+  "aggregation_rule": "fatal_with_evidence -> killed; missing_raw -> human_gate; missing_closest_work -> revise; disagreement -> human_gate; weak_evidence_or_missing_baseline -> revise; else promoted",
+  "artifact_count": 32,
+  "artifacts": [
+    {
+      "kind": "review_artifact",
+      "path": "review_matrix.csv",
+      "sha256": "sha256:261f222347e7eb1970294e2b4fc51d656aed7bf72bebfeda6c97feae92229bc8"
+    },
+    {
+      "kind": "review_artifact",
+      "path": "blocker_summary.md",
+      "sha256": "sha256:ca67ca50bbb0ac3f3f04637b09c1ddfa834f317e0ba88c65947ac98a2198ddea"
+    },
+    {
+      "kind": "review_artifact",
+      "path": "disagreement_report.md",
+      "sha256": "sha256:1db0f66817db07814dcae30bef02ef8b12c114dd34519060d58df0ee77d8b59d"
+    },
+    {
+      "kind": "review_artifact",
+      "path": "tournament_trace.jsonl",
+      "sha256": "sha256:8e92553db68b8da5482579cb5293aaa2cd49347dc081cab8d5f941c0db83e65e"
+    },
+    {
+      "kind": "review_artifact",
+      "path": "promoted_ideas.jsonl",
+      "sha256": "sha256:fd356ffddb0b6df6e6668d5c286c9d040593f5b6fdd88fba69af2b02f175f252"
+    },
+    {
+      "kind": "review_artifact",
+      "path": "killed_ideas.jsonl",
+      "sha256": "sha256:cf19470432122e44ebe50168e369a7442b47a143b37ba6feef37294eaef83689"
+    },
+    {
+      "kind": "review_artifact",
+      "path": "revise_ideas.jsonl",
+      "sha256": "sha256:60102ee77ae8a66a4626e7a4ba005bedec15b6f9dbf516d006d5ec699432ba10"
+    },
+    {
+      "kind": "review_artifact",
+      "path": "human_gate_ideas.jsonl",
+      "sha256": "sha256:323a02c636ee4301f9aa220999fa1ddef7f103a4480ff393aa4f53ffff7e1ec5"
+    },
+    {
+      "kind": "evidence_package:idea:5e301f25743423ef",
+      "path": "evidence_packages/idea:5e301f25743423ef.json",
+      "sha256": "sha256:b6494e52e5991b8fb82dfe91a42f411142e409da5404ffd8c1e78bdcd8f149d5"
+    },
+    {
+      "kind": "evidence_package:idea:638e03732df2e58b",
+      "path": "evidence_packages/idea:638e03732df2e58b.json",
+      "sha256": "sha256:bf15f63c6710880d7af87abb1b240801df78dbf2f89eeb157463fc6794b9a14e"
+    },
+    {
+      "kind": "evidence_package:idea:bdf48a9c899cef36",
+      "path": "evidence_packages/idea:bdf48a9c899cef36.json",
+      "sha256": "sha256:6f4db22f61765f1a9d5fcd9435ea029cb1d4dbe2b406c141b2ffb24c6d5567c7"
+    },
+    {
+      "kind": "evidence_package:idea:d3bf5354de3f1f42",
+      "path": "evidence_packages/idea:d3bf5354de3f1f42.json",
+      "sha256": "sha256:7d3a9e2d2a803000ea1f50112f8b106178ea3f6572189f418d18e6354422ef05"
+    },
+    {
+      "kind": "raw_review:engineering:idea:5e301f25743423ef",
+      "path": "raw/engineering/idea:5e301f25743423ef.json",
+      "schema": "review_trace.schema.json",
+      "sha256": "sha256:0351736c066c7027df0df1f7ef0fc44ffaddbfff6bd06e5db80a35d87395ffa0"
+    },
+    {
+      "kind": "raw_review:engineering:idea:638e03732df2e58b",
+      "path": "raw/engineering/idea:638e03732df2e58b.json",
+      "schema": "review_trace.schema.json",
+      "sha256": "sha256:5e19f42940b52984708296944bd79530d99628891c7d94f5bd173bc3076569b2"
+    },
+    {
+      "kind": "raw_review:engineering:idea:bdf48a9c899cef36",
+      "path": "raw/engineering/idea:bdf48a9c899cef36.json",
+      "schema": "review_trace.schema.json",
+      "sha256": "sha256:de183d3cd12ecf7442a94fa5f5a5c3bdcc901da1f44b49ba22f2c317eae82816"
+    },
+    {
+      "kind": "raw_review:engineering:idea:d3bf5354de3f1f42",
+      "path": "raw/engineering/idea:d3bf5354de3f1f42.json",
+      "schema": "review_trace.schema.json",
+      "sha256": "sha256:536a52ddc7fb05726219c2e0c85f25de4d13493bb0e5fb68867a76d00b111c7e"
+    },
+    {
+      "kind": "raw_review:experiment:idea:5e301f25743423ef",
+      "path": "raw/experiment/idea:5e301f25743423ef.json",
+      "schema": "review_trace.schema.json",
+      "sha256": "sha256:bdc4be7b0db11d7722737abedd7d8d0d5833398ef0633460babecf15ca3491cd"
+    },
+    {
+      "kind": "raw_review:experiment:idea:638e03732df2e58b",
+      "path": "raw/experiment/idea:638e03732df2e58b.json",
+      "schema": "review_trace.schema.json",
+      "sha256": "sha256:2e812ea5459413e62a12b5cf26b8905c30bed21f2aea5f6e4355f80fa2aed6aa"
+    },
+    {
+      "kind": "raw_review:experiment:idea:bdf48a9c899cef36",
+      "path": "raw/experiment/idea:bdf48a9c899cef36.json",
+      "schema": "review_trace.schema.json",
+      "sha256": "sha256:4d02f55a7dc970d941138fd42b33bc84f12130b4d5a7696dd9e76a01e0451bbe"
+    },
+    {
+      "kind": "raw_review:experiment:idea:d3bf5354de3f1f42",
+      "path": "raw/experiment/idea:d3bf5354de3f1f42.json",
+      "schema": "review_trace.schema.json",
+      "sha256": "sha256:f493b8d7dfbea0203fa0764e73b31298fc9b9dd6bf3eca7fbe364a60b0ff1fc5"
+    },
+    {
+      "kind": "raw_review:novelty:idea:5e301f25743423ef",
+      "path": "raw/novelty/idea:5e301f25743423ef.json",
+      "schema": "review_trace.schema.json",
+      "sha256": "sha256:d3af926f4180971fd92bb533ed524390d82b43282c692f2c01602ca7b7d05f0c"
+    },
+    {
+      "kind": "raw_review:novelty:idea:638e03732df2e58b",
+      "path": "raw/novelty/idea:638e03732df2e58b.json",
+      "schema": "review_trace.schema.json",
+      "sha256": "sha256:87d9d15ced88b05beae8cedb2c0d3f0e54b7bb59ab8b1eedc4c45ce0d95f1013"
+    },
+    {
+      "kind": "raw_review:novelty:idea:bdf48a9c899cef36",
+      "path": "raw/novelty/idea:bdf48a9c899cef36.json",
+      "schema": "review_trace.schema.json",
+      "sha256": "sha256:2b06f58306a6fbd4856fc68475f0741772052b51e94c37779acbfe83d815f5f8"
+    },
+    {
+      "kind": "raw_review:novelty:idea:d3bf5354de3f1f42",
+      "path": "raw/novelty/idea:d3bf5354de3f1f42.json",
+      "schema": "review_trace.schema.json",
+      "sha256": "sha256:6f262df006ceef52185576d4430d03d95c2076ebbd1831d1f5aa73e509258bc7"
+    },
+    {
+      "kind": "raw_review:reviewer_pressure:idea:5e301f25743423ef",
+      "path": "raw/reviewer_pressure/idea:5e301f25743423ef.json",
+      "schema": "review_trace.schema.json",
+      "sha256": "sha256:19bfc175c6930be35eb79579365f24ebba8e8be554d7ac4a217b8052ef141ed1"
+    },
+    {
+      "kind": "raw_review:reviewer_pressure:idea:638e03732df2e58b",
+      "path": "raw/reviewer_pressure/idea:638e03732df2e58b.json",
+      "schema": "review_trace.schema.json",
+      "sha256": "sha256:d878ab19588b483ee3fb58bf74521e6a44a33cfe9cfe24c04efb96a3292e444e"
+    },
+    {
+      "kind": "raw_review:reviewer_pressure:idea:bdf48a9c899cef36",
+      "path": "raw/reviewer_pressure/idea:bdf48a9c899cef36.json",
+      "schema": "review_trace.schema.json",
+      "sha256": "sha256:c479f879f22bf882aef0de22388975602143d85a24421ab30d7920a46f8e8ed9"
+    },
+    {
+      "kind": "raw_review:reviewer_pressure:idea:d3bf5354de3f1f42",
+      "path": "raw/reviewer_pressure/idea:d3bf5354de3f1f42.json",
+      "schema": "review_trace.schema.json",
+      "sha256": "sha256:2c456bfd39fccd8ebb4bf13d76001fca2b268d7d19c8925433ed683d94cacc87"
+    },
+    {
+      "kind": "raw_review:theory_or_mechanism:idea:5e301f25743423ef",
+      "path": "raw/theory_or_mechanism/idea:5e301f25743423ef.json",
+      "schema": "review_trace.schema.json",
+      "sha256": "sha256:9219e860a79ca8e5835c64adb89154186413e7324e615eb196fe55286d31e064"
+    },
+    {
+      "kind": "raw_review:theory_or_mechanism:idea:638e03732df2e58b",
+      "path": "raw/theory_or_mechanism/idea:638e03732df2e58b.json",
+      "schema": "review_trace.schema.json",
+      "sha256": "sha256:051edd5b412764a232bde432403c692d4d9e90f6ba5c475fa0b6f3b53b81a3c0"
+    },
+    {
+      "kind": "raw_review:theory_or_mechanism:idea:bdf48a9c899cef36",
+      "path": "raw/theory_or_mechanism/idea:bdf48a9c899cef36.json",
+      "schema": "review_trace.schema.json",
+      "sha256": "sha256:5a90be36ba7bdfe1b7e2015eb32d45aa4fc5b5e793e884dc3b7c2b084c065650"
+    },
+    {
+      "kind": "raw_review:theory_or_mechanism:idea:d3bf5354de3f1f42",
+      "path": "raw/theory_or_mechanism/idea:d3bf5354de3f1f42.json",
+      "schema": "review_trace.schema.json",
+      "sha256": "sha256:ca1f14fa884df2a54e3262db8dee49a654077d27c73681bd0b5138a07d5ca07c"
+    }
+  ],
+  "created_at": "2026-04-27T05:26:15Z",
+  "decision_counts": {
+    "human_gate": 1,
+    "killed": 1,
+    "promoted": 1,
+    "revise": 1
+  },
+  "idea_ids": [
+    "idea:d3bf5354de3f1f42",
+    "idea:5e301f25743423ef",
+    "idea:bdf48a9c899cef36",
+    "idea:638e03732df2e58b"
+  ],
+  "ideas_path": "tests/fixtures/ideas/valid_portfolio",
+  "input_hash": "sha256:0399453de2da3164cca862b89db11d3c3219c49fe8ccd9b21fd726a188a5f77a",
+  "parent_state_ids": [
+    "idea_portfolio:0ce053c7e800305f"
+  ],
+  "producer": {
+    "name": "resmax_review",
+    "run_id": "phase6",
+    "version": "0.1.0"
+  },
+  "raw_reviews_preserved": true,
+  "required_reviewer_roles": [
+    "novelty",
+    "theory_or_mechanism",
+    "experiment",
+    "engineering",
+    "reviewer_pressure"
+  ],
+  "schema_version": "0.1.0",
+  "single_average_score_allowed": false,
+  "state_id": "review_manifest:0399453de2da3164",
+  "tournament_policy": "pairwise_blocker_first_append_only_jsonl"
+}

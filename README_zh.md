@@ -6,7 +6,7 @@
 
 > 面向 AI agent 的自动化科研文献基础设施。
 >
-> 将科研流程中可标准化的文献环节封装为可复用 Skill，让 agent 高质量地完成论文库构建、语义索引与方向级调研。
+> 将科研流程中可标准化的文献环节封装为可复用 Skill，让 agent 高质量地完成论文库构建、语义索引、方向级调研、证据锚定的 idea portfolio 与 blocker-first review tournament。
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
 ![Python](https://img.shields.io/badge/python-3.10%2B-blue.svg)
@@ -24,7 +24,7 @@
 
 ## 亮点
 
-- **三 Skill 协同、文件系统解耦** — `resmax-database` / `resmax-embedding` / `resmax-survey` 仅通过 CSV 与 `.npz` 缓存交换数据，无运行时依赖，可独立替换。
+- **五个工作流 Skill 协同、文件系统解耦** — `resmax-database` / `resmax-embedding` / `resmax-survey` / `resmax-idea` / `resmax-review` 只通过稳定文件产物交换数据，无运行时依赖，可独立替换。
 - **AI 顶会/顶刊覆盖** — 基于 OpenReview / OpenAlex / Semantic Scholar 等多源抓取录用列表，自动补全摘要、评审、开源信息、录用等级。
 - **双路检索 + LLM 评分** — 关键词检索与 Qwen3-Embedding-8B 语义检索合并去重后，由 subagent 逐篇评分，主 agent 再复核。
 - **增量友好 + 可验证** — 每个阶段输出稳定文件，`validate_database.py` 作为数据库可用性的单一事实源。
@@ -54,7 +54,19 @@
   ┌─────────────────────┐         literature_research/<topic>/
   │   resmax-survey     │───────▶ ├── research_index.csv
   │   retrieve + rank   │         ├── literature_list.md
-  └─────────────────────┘         └── filter_log.md
+  └─────────────────────┘         ├── research_pack/
+              │                   └── filter_log.md
+              ▼
+  ┌─────────────────────┐         literature_research/<topic>/ideas/
+  │    resmax-idea      │───────▶ ├── idea_cards.jsonl
+  │  compile portfolio  │         └── idea_report.md
+  └─────────────────────┘
+              │
+              ▼
+  ┌─────────────────────┐         literature_research/<topic>/reviews/
+  │    resmax-review    │───────▶ ├── raw/<reviewer>/<idea_id>.json
+  │  blocker tournament │         └── promoted/killed/revise/human_gate JSONL
+  └─────────────────────┘
 ```
 
 每一层只读取上一层的产物，因此可单独重跑、替换某阶段，或在不影响其余流水线的情况下更换嵌入模型。
@@ -69,7 +81,9 @@ resmax/
 │   ├── _shared/                 #   跨 Skill 工具（secrets_loader 等）
 │   ├── resmax-database/         #   Skill 1：基础文献索引
 │   ├── resmax-embedding/        #   Skill 2：GPU 上构建 embedding 缓存
-│   └── resmax-survey/           #   Skill 3：方向级检索与排序
+│   ├── resmax-survey/           #   Skill 3：方向级检索与 ResearchPack
+│   ├── resmax-idea/             #   Skill 4：ResearchPack -> idea portfolio
+│   └── resmax-review/           #   Skill 5：raw reviews -> blocker tournament
 ├── .claude/skills -> ../.agents/skills
 ├── .codex/skills  -> ../.agents/skills
 ├── .cursor/skills -> ../.agents/skills
@@ -152,6 +166,8 @@ python3 .agents/skills/resmax-init/scripts/resmax_init_check.py --materialize --
 | 构建或更新基础文献索引 | 「更新 accepted」/ 「build literature base」/ 「全量重建」 | `paper_database/accepted_index.csv` |
 | 构建或刷新 embedding 缓存 | 「build embedding」/ 「更新 embedding」 | `paper_database/embedding_cache/*.npz` |
 | 执行某一主题的文献调研 | 「检索文献 \<topic\>」/ 「文献调研 \<topic\>」 | `literature_research/<topic>/` |
+| 生成 idea portfolio | 「从这个 ResearchPack 生成 idea」/ 「执行 resmax-idea」 | `literature_research/<topic>/ideas/` |
+| 评审 idea portfolio | 「review this idea portfolio」/ 「执行 resmax-review」 | `literature_research/<topic>/reviews/` |
 
 如果缺少必需值，agent 必须暂停并向你索要，不能编造默认值。
 
@@ -164,7 +180,9 @@ python3 .agents/skills/resmax-init/scripts/resmax_init_check.py --materialize --
 | 0 | `resmax-init` | 首次初始化：本地 env、必填/可选字段、数据库产物来源选择 | `.secrets/*.env` + `.localconfig/*.env` + setup report | [链接](./.agents/skills/resmax-init/SKILL.md) |
 | 1 | `resmax-database` | 多源录用列表抓取 + 批量补全（摘要 / 评审 / 代码 / 录用类型） | `accepted_index.csv` + `reviews/` | [链接](./.agents/skills/resmax-database/SKILL.md) |
 | 2 | `resmax-embedding` | 在 GPU 服务器上对标题+摘要用 Qwen3-Embedding-8B 编码，输出 `.npz` 缓存 | `embedding_cache/qwen3_8b.npz` | [链接](./.agents/skills/resmax-embedding/SKILL.md) |
-| 3 | `resmax-survey`   | 双路检索（关键词 + embedding）→ 合并 → 逐篇打分 → 主 agent 复核 → 排序列表 | `literature_research/<topic>/literature_list.md` | [链接](./.agents/skills/resmax-survey/SKILL.md) |
+| 3 | `resmax-survey`   | 双路检索 + evidence-first ResearchPack + ROI-aware gap lens | `literature_research/<topic>/research_pack/` | [链接](./.agents/skills/resmax-survey/SKILL.md) |
+| 4 | `resmax-idea` | 将 validated ResearchPack 编译为 IdeaCards、lineage、closest-work checks 与 falsification notes | `literature_research/<topic>/ideas/` | [链接](./.agents/skills/resmax-idea/SKILL.md) |
+| 5 | `resmax-review` | 保存异质 raw reviews、聚合 blockers 并运行 pairwise tournament | `literature_research/<topic>/reviews/` | [链接](./.agents/skills/resmax-review/SKILL.md) |
 
 各 Skill 的内部阶段、参数、错误处理与行为约束均写在其 `SKILL.md` 中，作为面向 agent 的权威「API 手册」。
 
@@ -194,6 +212,9 @@ python3 .agents/skills/resmax-init/scripts/resmax_init_check.py --materialize --
 | `literature_research/<topic>/research_index.csv` | `resmax-survey` | 主题级命中子集 |
 | `literature_research/<topic>/literature_list.md` | `resmax-survey` | 最终排序列表（含分数与理由） |
 | `literature_research/<topic>/filter_log.md` | `resmax-survey` | 过滤 / 打分流水线日志 |
+| `literature_research/<topic>/research_pack/` | `resmax-survey` | Evidence、ClaimGraph、GapMap、reviewer pressure、paper roles 与 ROI lens |
+| `literature_research/<topic>/ideas/` | `resmax-idea` | IdeaCards、lineage、closest-work checks、拒稿理由与最小证伪 notes |
+| `literature_research/<topic>/reviews/` | `resmax-review` | Evidence packages、raw ReviewTrace JSON、blocker aggregation、tournament trace 与 promoted/killed/revise/human_gate JSONL |
 | `cache/huggingface/resmax/` | `scripts/resmax_data.py` | 内部 Hugging Face 传输镜像，包含 `accepted_index.csv`、`manifest.json`、`qwen3_8b.npz` 和压缩后的 `reviews/` |
 
 上述目录均被 git 忽略，属于可复现产物。

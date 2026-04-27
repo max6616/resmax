@@ -1,0 +1,41 @@
+{
+  "paper_id": "p-graph-diffusion",
+  "forum_id": "forum-graph",
+  "venue": "ICLR",
+  "year": 2024,
+  "score_scale": "1-10",
+  "reviews": [
+    {
+      "reviewer_id": "Reviewer_A",
+      "rating": 5,
+      "confidence": 4,
+      "summary": "The paper studies graph diffusion planning and has a plausible benchmark story.",
+      "strengths": "The method is compact and the task framing is useful for graph reasoning.",
+      "weaknesses": "The baseline comparison is incomplete: the paper does not compare against stronger SOTA planning baselines, and the ablation does not isolate the graph diffusion module.",
+      "questions": "Can the authors report runtime and compute cost, and clarify whether the dataset split is public enough for reproduction?",
+      "limitations": ""
+    },
+    {
+      "reviewer_id": "Reviewer_B",
+      "rating": 6,
+      "confidence": 3,
+      "summary": "The idea is promising but the implementation details are thin.",
+      "strengths": "The empirical benchmark is relevant.",
+      "weaknesses": "Reproducibility is a concern because the implementation details, hyperparameters, and code release plan are not sufficiently specified.",
+      "questions": "How sensitive is the method to graph size and dataset noise?",
+      "limitations": ""
+    }
+  ],
+  "meta_review": {
+    "recommendation": "Accept",
+    "content": "The main blockers are baseline completeness and reproducibility detail."
+  },
+  "rebuttals": [
+    {
+      "round": 1,
+      "content": "We added stronger baselines, runtime measurements, ablation details, and a public code release checklist."
+    }
+  ],
+  "decision": "Accept",
+  "fetched_at": "2026-04-27T00:00:00Z"
+}

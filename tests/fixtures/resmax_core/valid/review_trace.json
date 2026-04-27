@@ -1,0 +1,33 @@
+{
+  "schema_version": "0.1.0",
+  "state_id": "review_trace:bbbbbbbb",
+  "created_at": "2026-04-27T00:10:00Z",
+  "input_hash": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "parent_state_ids": ["idea_card:aaaaaaaa"],
+  "producer": {"name": "phase0-fixture", "version": "0.1.0", "run_id": "fixture"},
+  "review_id": "review-1",
+  "review_trace_id": "review-1",
+  "idea_id": "idea:aaaaaaaa",
+  "idea_card_id": "idea_card:aaaaaaaa",
+  "reviewer_role": "skeptical_reviewer",
+  "reviewer_model": "review-model-a",
+  "generator_model": "generator-model-b",
+  "review_independence_confidence": "high",
+  "prompt": "Review only the standard evidence package.",
+  "prompt_hash": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "evidence_package_hash": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+  "raw_response": "The idea needs a stronger closest-work delta before promotion.",
+  "raw_review": "The idea needs a stronger closest-work delta before promotion.",
+  "blockers": [
+    {
+      "blocker_type": "closest_work_delta_not_verified",
+      "severity": "major",
+      "evidence_status": "supported",
+      "evidence_ids": ["evidence_card:aaaaaaaa"],
+      "explanation": "The closest-work delta needs stronger evidence before promotion."
+    }
+  ],
+  "scores": {"novelty": 2, "feasibility": 4, "evidence_confidence": 2, "review_risk": 4},
+  "recommended_status": "revise",
+  "decision_status": "needs_revision"
+}

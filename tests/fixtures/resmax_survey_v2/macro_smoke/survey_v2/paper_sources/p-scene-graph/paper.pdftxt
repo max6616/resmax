@@ -1,0 +1,1616 @@
+Spatial-Temporal Transformer for Dynamic Scene Graph Generation
+Yuren Cong1, Wentong Liao1, Hanno Ackermann1, Bodo Rosenhahn1, Michael Ying Yang2
+1TNT, Leibniz University Hannover, 2SUG, University of Twente
+Abstract
+Dynamic scene graph generation aims at generating a
+scene graph of the given video.
+Compared to the task
+of scene graph generation from images, it is more chal-
+lenging because of the dynamic relationships between ob-
+jects and the temporal dependencies between frames allow-
+ing for a richer semantic interpretation. In this paper, we
+propose Spatial-temporal Transformer (STTran), a neural
+network that consists of two core modules: (1) a spatial en-
+coder that takes an input frame to extract spatial context
+and reason about the visual relationships within a frame,
+and (2) a temporal decoder which takes the output of the
+spatial encoder as input in order to capture the temporal
+dependencies between frames and infer the dynamic rela-
+tionships. Furthermore, STTran is flexible to take varying
+lengths of videos as input without clipping, which is espe-
+cially important for long videos. Our method is validated
+on the benchmark dataset Action Genome (AG). The ex-
+perimental results demonstrate the superior performance
+of our method in terms of dynamic scene graphs. More-
+over, a set of ablative studies is conducted and the effect
+of each proposed module is justified. Code available at:
+https://github.com/yrcong/STTran.
+1. Introduction
+A scene graph is a structural representation that sum-
+maries objects of interest as nodes and their relationships
+as edges [26, 29]. Recently, scene graphs have been suc-
+cessfully applied in different vision tasks, such as image
+retrieval [26, 46], object detection, semantic segmenta-
+tion, human-object interaction [15], image synthesis [24, 3],
+and high-level vision-language tasks like image captioning
+[13, 62] or visual question answering (VQA) [25]. It is
+treated as a promising approach towards holistic scene un-
+derstanding and a bridge connecting the large gap between
+vision and natural language domains. Therefore, the task
+of scene graph generation has caught increasing attention in
+communities.
+While the great progress made in scene graph genera-
+tion from a single image (static scene graph generation), the
+static scene graph
+touch
+in front of
+look at
+spatial contextualization
+spatial-temporal contextualization
+in front of
+touch
+in front of
+look at
+in front of
+dynamic scene graph
+hold
+in front of
+look at
+in front of
+drink from
+in front of
+look at
+in front of
+t
+t+1
+t
+t+1
+Figure 1: The difference between scene graph generation
+from image and video. In the video, the person is watch-
+ing TV and drinking water from the bottle. Dynamic Scene
+graph generation can utilize both spatial context and tem-
+poral dependencies (3rd row) compared with image-based
+scene graph generation (2nd row). Nodes in different colors
+denote objects (person,bottle,tv) in the frames.
+task of scene graph generation from a video (dynamic scene
+graph generation) is new and more challenging. The most
+popular approach of static scene graph generation is built
+upon an object detector that generates object proposals, and
+then infers their relationship types as well as their object
+classes. However, objects are not sure to be consistent in
+each frame of the video sequence and the relationships be-
+tween any two objects may vary because of their motions,
+which is characterized by dynamic. In this case, temporal
+dependencies play a role, and thus, the static scene graph
+generation methods are not directly applicable to dynamic
+scene graph generation, which has been fully discussed in
+[22] and verified by the experimental results analyzed in
+Sec. 4. Fig. 1 showcases the difference between scene graph
+generation from image and video.
+Action recognition is an alternative to detect the dynamic
+16352
+2021 IEEE/CVF International Conference on Computer Vision (ICCV)
+DOI 10.1109/ICCV48922.2021.01606
+2021 IEEE/CVF International Conference on Computer Vision (ICCV) | 978-1-6654-2812-5/21/$31.00 ©2021 IEEE | DOI: 10.1109/ICCV48922.2021.01606
+978-1-6654-2812-5/21/$31.00 ©2021 IEEE
+
+
+relationships between objects. However, actions and activ-
+ities are typically regarded as monolithic events that occur
+in videos in action recognition [4, 27, 47, 33]. It has been
+studied in Cognitive Science and Neuroscience that people
+perceive an ongoing activity by segmenting them into con-
+sistent groups and encoding into a hierarchical part structure
+[30]. Let’s take the activity ”drinking water” as an example,
+as shown in Fig. 1. The person starts this activity by holding
+the bottle in front of her, and then holds it up and takes wa-
+ter. More complex, the person is looking at the television at
+the same time. Decomposition of this activity is useful for
+understanding how it happens and what is going on. Associ-
+ating with the scene graph, it is possible to predict what will
+happen: after the person picks up the bottle in front of her,
+we can predict that the person is likely to drink water from
+it. Representing temporal events with structured representa-
+tions, i.e. dynamic scene graph, could lead to more accurate
+and grounded action understanding. However, most of the
+existing methods for action recognition are not able to de-
+compose the activity in this way.
+In this paper, we explore how to generate a dynamic
+scene graph from sequences effectively. The main contri-
+butions are summarized as: (1) We propose a novel frame-
+work, Spatial-Temporal Transformer (STTran), which en-
+codes the spatial context within single frames and decodes
+visual relationship representations with temporal dependen-
+cies across frames. (2) Distinct from the majority of related
+works, multi-label classification is applied in relationship
+prediction and a new strategy to generate a dynamic scene
+graph with confident predictions is introduced. (3) With
+several experiments, we verify that temporal dependencies
+have a positive effect on relationship prediction and our
+model improves performance by understanding it. STTran
+achieves state-of-the-art results on Action Genome [22].
+2. Related Work
+Scene Graph Generation
+Scene graph has first been pro-
+posed in [26] for image retrieval and caught increasing at-
+tention in Computer Vision community [42, 61, 35, 9, 38,
+51, 55, 62, 64, 37]. It is a graph-based representation de-
+scribing interactions between objects in the image. Nodes in
+the scene graph indicate the objects while edges denote the
+relationships. The applications include image retrieval [46],
+image captioning [1, 45], VQA [51, 25] and image genera-
+tion [24, 19]. In order to generate high-quality scene graphs
+from images, a series of works explore different directions
+such as utilizing spatial context [61, 65, 40], graph struc-
+ture [60, 58, 34], optimization [8], reinforcement learning
+[36, 51], semi-supervised training [7] or a contrastive loss
+[66]. These works have achieved excellent results on image
+datasets [29, 42, 31]. Although it is universal for multiple
+relationships to co-occur between a subject-object pair in
+the real world, the majority of previous works defaults to
+edge prediction as single-label classification. Despite the
+progress made in this field, all these methods are designed
+for static images. In order to extend the gain brought by
+scene graphs in images to video, Ji et al. [22] collect a large
+dataset of dynamic scene graphs by decomposing activities
+in videos and improve state of the art results for video action
+recognition with dynamic scene graph.
+Transformer for Computer Vision
+The vanilla Trans-
+former architecture was proposed by Vaswani et al. [54]
+for neural machine translation. Many transformer variants
+are developed and have achieved great performance in lan-
+guage modeling tasks, especially the large-scale pre-trained
+language models, like GPT [44] and BERT [10].
+Then,
+Transformers have also been widely and successfully ap-
+plied in many vision-language tasks, such as image cap-
+tioning [59, 18], VQA [2, 63]. To further bridge the vision
+and language domains, different Bert-like large-scale pre-
+trained models are also developed, like Caption-Based Im-
+age Retrieval and Visual Commonsense Reasoning (VCR)
+[43, 32, 50]. Most recently, Transformers are attracting in-
+creasing attention in the vision community. DETR is intro-
+duced by Carion et al. [5] for object detection and panop-
+tic segmentation. Moreover, Transformers are explored to
+learn vision features from the given image instead of the
+traditional CNN backbones and achieve promising perfor-
+mance [12, 52]. The core mechanism of Transformer is its
+self-attention building block which is able to make predic-
+tions by selectively attending to the input points (each point
+can be a word representation of a sentence or a local fea-
+ture from an image), so that context is captured between
+different input points and the representation of each point is
+refined. Nonetheless, the above methods focus on learning
+spatial context with a transformer from a single image while
+temporal dependencies play a role in video understanding.
+Action Transformer is proposed by Girdhar et al. [14] that
+utilizes transformer to refine the spatio-temporal represen-
+tations, which are learned by I3D model [6] and then pooled
+from the RoI given by a RPN network [45], for recognizing
+human actions in video clips. In fact, the transformer mod-
+ule is still used to learn spatial context. VisTR is introduced
+in [57] for video segmentation. The features of each frame
+that are extracted by a CNN backbone are fed to a trans-
+former encoder to learn the temporal information of a video
+sequence.
+Spatial-Temporal Networks
+Spatial-temporal informa-
+tion is the key to access video understanding [39, 28, 21]
+and has been long and well studied.
+To date, the most
+popular approaches are RNN/LSTM-based [20] or 3D
+ConvNets-based [23, 53] structures. The former takes fea-
+tures from each frame sequentially and learns the temporal
+information [49, 11]. The latter extends the traditional 2D
+convolution (height and width dimension) to time dimen-
+sion for sequential inputs. Simonyan et al. [48] introduce a
+16353
+
+
+two-stream CNN structure that spatial and temporal infor-
+mation is learned on different streams respectively. Resid-
+ual connections are inserted between the two information
+streams to allow information fusion. Then, the 2D convo-
+lution in the two-stream structure is inflated into its coun-
+terpart 3D convolution, dubbed I3D model [6]. Non-local
+Neural Networks [56] introduce another kind of generic
+self-attention mechanism, non-local operation. It computes
+relatedness between different locations in the input signal
+and refines the inputs by weighted sum of different inputs
+based on the relatedness. Their method is easy to be applied
+in video input by extending the non-local operation along
+the time dimension. However, these works are applied for
+activity recognition and are not able to decompose the ac-
+tivity into consistent groups. In this work, we do not only
+utilize transformer to learn spatial context between objects
+within a frame, but also the temporal dependencies between
+frames to infer the dynamic relationships varying along the
+time axis.
+3. Method
+A dynamic scene graph Gdyn(Vt, Et) can be modeled
+as a static scene graph Gstat(V, E) with an extra index t
+representing the relations over time as an extra temporal
+axis. Inspired by the transformer characteristics: (1) the ar-
+chitecture is permutation-invariant, and (2) the sequence is
+compatible with positional encoding, we introduce a novel
+model, Spatial-Temporal Transformer (STTran), in order
+to utilize the spatial-temporal context along videos (see
+Fig. 2).
+3.1. Transformer
+First, we take a brief review on the transformer struc-
+ture. The transformer is proposed by Vaswani et al. [54]
+and consists of a stack of multi-head dot-product attention
+based transformer refining layers. In each layer, the input
+X ∈RN×D that has N entries of D dimensions, is trans-
+formed into queries (Q = XWQ, WQ ∈RD×Dq), keys
+(K = XWK, WK ∈RD×Dk) and values (V = XWV ,
+WV ∈RD×Dv) though linear transformations. Note that
+Dq, Dk and Dv are the same in the implementation nor-
+mally. Each entry is refined with other entries through dot-
+product attention defined by:
+ \label {eq: at t e n tion} \
+cent
+eri
+n
+g  \begin {aligned} Attention(\bm {Q},\bm {K},\bm {V}) = Softmax\left (\frac {\bm {Q}\bm {K}^T}{\sqrt {D_k}}\right ) \bm {V}, \end {aligned} 
+(1)
+To improve the performance of the attention layer, multi-
+head attention is applied which is defined as :
+  \centering  \ b e g in {aligne d }  &  Multi
+He a d(\bm {Q},\bm { K},\b m {V}) = Concat(h_1,\dots ,h_h)\bm {W}_O,\\ & h_i = Attention(\bm {X}\bm {W}_{Q_i},\bm {X}\bm {W}_{K_i},\bm {X}\bm {W}_{V_i}). \end {aligned} \label {eq:multiheawd_1} 
+(2)
+A complete self-attention layer contains the above self-
+attention module followed by a normalization layer with
+residual connection and a feed-forward layer, which is also
+followed by a normalization layer with residual connec-
+tion. For simplicity, we denote such a self-attention layer
+as Att(.). In this work, we design a Spatio-Temporal Trans-
+former based on Att(.) to explore the spatial context, which
+works on a single frame, and temporal dependencies that
+work on sequence, respectively.
+3.2. Relationship Representation
+We employ Faster R-CNN [45] as our backbone. For
+the frame It at time step t in a given video with T frames
+V = [I1, I2, . . . , IT ], the detector provides visual features
+{v1
+t , . . . , vN(t)
+t
+}∈R2048, bounding boxes {b1
+t, . . . , bN(t)
+t
+}
+and object category distribution {d1
+t, . . . , dN(t)} of object
+proposals where N(t) indicates the number of object pro-
+posals in the frame. Between the N(t) object proposals
+there is a set of relationships Rt = {r1
+t , r2
+t , . . . , rK(t)
+t
+}.
+The representation vector xk
+t of the relation rk
+t between the
+i-th and j-th object proposals contains visual appearances,
+spatial information and semantic embeddings, which can be
+formulated as:
+  
+\ b
+m
+ {x}
+^k _t =
+ \ left < 
+\ b m {W}_{
+s} \b
+m {v} ^i
+_t ,\
+b
+m {W}_{o}\bm {v}^j_t,\bm {W}_{u}\varphi (\bm {u}^{ij}_t\oplus f_{box}(\bm {b}^i_t,\bm {b}^j_t))),\bm {s}^i_t,\bm {s}^j_t \right > \label {Eq:rel_features} 
+(3)
+where ⟨, ⟩is concatenation operation, φ is flattening opera-
+tion and ⊕is element-wise addition. Ws, Wo ∈R2048×512
+and Wu ∈R12544×512 represent the linear matrices for di-
+mension compression. uij
+t
+∈R256×7×7 indicates the fea-
+ture map of the union box computed by RoIAlign [16] while
+fbox is the function transforming the bounding boxes of sub-
+ject and object to an entire feature with the same shape as
+uij
+t . The semantic embedding vectors si
+t, sj
+t ∈R200 are de-
+termined by the object categories of subject and object. The
+relationship representations exchange spatial and temporal
+information in Spatial-Temporal Transformer.
+3.3. Spatio-Temporal Transformer
+The Spatio-Temporal Transformer maintains the original
+encoder-decoder architecture [54]. The difference is, the
+encoder and decoder are delegated the more concrete tasks.
+Spatial Encoder
+concentrates on the spatial context
+within
+a
+frame
+whose
+input
+is
+a
+single
+Xt
+=
+{x1
+t, x2
+t, . . . , xK(t)
+t
+}. The queries Q, keys K and values
+V share the same input and the output of the n-th encoder
+layer is presented as:
+  \b
+m
+ {X}^{(n)} _ t  =  Att_{e
+n
+c.}(\bm {Q}=\bm {K}=\bm {V}=\bm {X}^{(n-1)}_t) \label {Eq:enc_formula} 
+(4)
+The encoder consists of N identical Attenc. layers that are
+stacked sequentially. The input of the (n)-th layer is the out-
+put of the (n −1)-th layer. For simplicity, we remove the
+superscript n in the following discussion. Unlike the major-
+ity of transformer methods, no additional position encoding
+16354
+
+
+Q
+K
+V
+Multi-Head
+Attention
+Add & Norm
+FFN
+Add & Norm
+Multi-Head
+Attention
+Add & Norm
+FFN
+Add & Norm
++
+Spatial Encoder
+Temporal Decoder
+frame
+encodings
+Detector
+video frames
+tn-1
+tn
+tn+1
+Classifiers
+relation 
+representations
+combined 
+representations
+tn-1
+tn
+tn+1
+dynamic scene graph
+Q
+K
+V
+Figure 2: Overview of our method: the object detection backbone proposes object regions in RGB video frames and the rela-
+tionship feature vectors are pre-processed (Sec. 3.2). The encoder of the proposed Spatial-Temporal Transformer (Sec. 3.3)
+first extracts the spatial context within single frames. The relation representations refined by encoder stacks from different
+frames are combined and added to learned frame encodings. The decoder layers capture temporal dependencies and rela-
+tionships are predicted with linear classifiers for different relation type (such as attention, spatial, contact). ⊕indicates
+element-wise addition while FFN stands for feed-forward network.
+is integrated into the inputs since the relationships within
+a frame are intuitively parallel. Having said that, the spa-
+tial information hiding in the relation representations (see
+Eq. 3) plays a crucial role in the self-attention mechanism.
+The final output of the encoder stacks is sent to the Tempo-
+ral Decoder.
+Frame Encoding
+is introduced for the temporal decoder.
+Without convolution and recurrence, the knowledge of se-
+quence order such as positional encoding must be embed-
+ded in the input for the transformer. In contrast to the word
+position in [54] or the pixel position in [5], we customize
+the frame encodings to inject the temporal position in the
+relationship representations. The frame encodings Ef are
+constructed with learned embedding parameters, since the
+amount of the embedding vectors depending on the win-
+dow size η in the Temporal Decoder is fixed and relative
+short: Ef = [e1, . . . , eη], where e1, . . . , eη ∈R1936 are
+the learned vectors with the same length as xk
+t .
+The widely used sinusoidal encoding method is also ana-
+lyzed (see Table 5). We adopt the learned encoding method
+because of its overall better performance. The window size
+η is fixed and therefore the video length does not affect the
+length of frame encodings.
+Temporal Decoder
+captures the temporal dependencies
+between frames. Not only the amount of calculation re-
+quired and the memory consumption increase greatly, but
+also useful information is easily overwhelmed by a large
+number of irrelevant representations. In this work, we adopt
+a sliding window to batch the frames so that the message is
+passed between the adjacent frames in order to avoid inter-
+ference with distant frames.
+Different from [54], the self-attention layer of our tem-
+poral decoder is identical to the spatial encoder Attenc.(),
+i.e. the masked multi-head self-attention layers are re-
+moved. A sliding window of size η runs over the sequence
+of spatial contextualized representations [X1, . . . , XT ] and
+the i-th generated input batch is presented as:
+  \ bm { Z } _ { i} = [\b m  {X} _ { i } , \ d o ts ,\bm {X}_{i+\eta -1}], i\in \lbrace 1,\dots ,T-\eta +1 \rbrace \label {Eq:batch_input} 
+(5)
+where the window size η ≤T and T is the video length.
+The decoder consists of N stacked identical self-attention
+layer Attdec() similar as the encoder structure. Considering
+the first layer:
+  \ c en t eri
+n g  \b
+egi n  {aligned}  &  \bm {Q} = \bm {K} = \bm {Z}_i + \bm {E}_{f},\\ & \bm {V} = \bm {Z}_i, \\ &\hat {\bm {Z}}_i = Att_{dec.}(\bm {Q},\bm {K},\bm {V}). \end {aligned} \label {eq:multiheawd} 
+(6)
+Regarding the first line in Eq. 6, same encoding is added
+to the relation representations in the same frame as queries
+and keys. The output from the last decoder layer is adopted
+for final prediction. Because of the sliding widow, the rela-
+tionships in a frame have various representation in different
+batches. In this work, we choose the earliest representation
+appearing in the windows.
+3.4. Loss Function
+We employ multiple linear transformations to in-
+fer
+different
+kinds
+of
+relationships
+(such
+as
+atten-
+tion, spatial, contacting) with the refined representa-
+tions.
+In reality, the same type of relationship be-
+tween two objects is not unique in semantics, such as
+synonymous actions <person-holding-broom> and
+<person-touching-broom>. Thereby, we introduce
+the multi-label margin loss function for predicate classifica-
+tion as follows:
+  L_{ p}( r,\ m
+a
+thca
+l
+ {P}
+^{+},\ mathca l {P}^{ -}) = \sum _{p\in \mathcal {P}^{+}} \sum _{q\in \mathcal {P}^{-}}max(0,1-\phi (r,p)+\phi (r,q)) \label {Eq:pred_loss1} 
+(7)
+16355
+
+
+For a subject-object pair r, P+ are the annotated predicates
+while P−is the set of the predicates not in the annotation.
+ϕ(r, p) indicates the computed confidence score of the p-th
+predicate.
+During training, the object distribution is computed by
+two fully-connected layers with a ReLU activation and a
+batch normalization in between. The standard cross entropy
+loss Lo is utilized. The total objective is formulated as:
+  L_{t o ta l } = L_p+L_o \label {Eq:pred_loss2} 
+(8)
+3.5. Graph Generation Strategies
+There are two typical strategies to generate a scene graph
+with the inferred relation distribution in previous works:
+(a) With Constraint only allows each subject-object pair
+to have at most one predicate while (b) No Constraint al-
+lows a subject-object pair to have multiple edges in the out-
+put graph with multiple guesses. With Constraint is more
+rigorous and indicates the ability of models to predict the
+most important relationships, but it is incompetent for the
+multi-label task. Although No Constraint can reflect the
+ability of multi-label prediction, tolerant multiple guesses
+cause wrong information in the generated scene graph.
+In order to make the generated scene graph closer to
+ground truth, we propose a new strategy named Semi
+Constraint allowing that a subject-object pair has multi-
+ple predicates such as <person-holding-food> and
+<person-eating-food>. The predicate is regarded
+as positive iff the corresponding relation confidence is
+higher than the threshold.
+At test time, the score of each relationship triplet
+<subject-predicate-object> is computed as:
+  s_ { rel}  = s _{sub}\cdot s_{p}\cdot s_{obj}, \label {Eq:pred_loss3} 
+(9)
+where ssub,sp,sobj are the confidence score of subject, pred-
+icate and object respectively.
+4. Experiments
+4.1. Dataset and Evaluation Metrics
+Dataset
+We train and validate our model on the Ac-
+tion Genome (AG) dataset [22] which provides frame-
+level scene graph labels and is built upon the Charades
+dataset [47].
+476, 229 bounding boxes of 35 object
+classes (without person) and 1, 715, 568 instances of 25
+relationship classes are annotated for 234, 253 frames.
+These 25 relationships are subdivided into three differ-
+ent types:
+(1) attention relationships denoting whether
+a person is looking at an object, (2) spatial relation-
+ships and (3) contact relationships which indicate the dif-
+ferent ways the object is contacted.
+In AG, 135, 484
+subject-object pairs are labeled with multiple spatial
+relationships (e.g. <door-in front of-person>
+and <door-on the side of-person>) or con-
+tact relationships (e.g. <person-eating-food> and
+<person-holding-food>).
+Evaluation Metrics
+We follow three standard tasks from
+image-based scene graph generation [42] for evaluation :
+(1) predicate classification (PREDCLS): given ground truth
+labels and bounding boxes of objects, predict predicate la-
+bels of object pairs.
+(2) scene graph classification (SG-
+CLS): classify the ground truth bounding boxes and predict
+relationship labels. (3) Scene graph detection (SGDET):
+detect the objects and predict relationship labels of ob-
+ject pairs.
+The object detection is regarded as success-
+ful if the predicted box overlaps with the ground-truth box
+at least 0.5 IoU. All tasks are evaluated with the widely
+used Recall@K metrics (K = [10, 20, 50]) following With
+Constraint, Semi Constraint and No Constraint.
+The
+threshold of confidence in the relationship is set to 0.9 in
+Semi Constraint for all experiments if no special instruc-
+tion.
+4.2. Technical Details
+In this work, FasterRCNN [45] based on ResNet101 [17]
+is adopted as object detection backbone. We first train the
+detector on the training set of Action Genome [22] and get
+24.6 mAP at 0.5 IoU with COCO metrics. The detector is
+applied to all baselines for fair comparison. The parameters
+of the object detector including RPN are fixed when train-
+ing scene graph generation models. Per-class non-maximal
+suppression at 0.4 IoU is applied to reduce region proposals
+provided by RPN.
+We use an AdamW [41] optimizer with initial learning
+rate 1e−5 and batch size 1 to train our model. Moreover,
+gradient clipping is applied with a maximal norm of 5. For
+all experiments on Action Genome, we set the window size
+η = 2 and stride = 1 for our STTran. The spatial en-
+coder contains 1 layer while the temporal decoder contains
+3 iterative layers. The self-attention module in both en-
+coder and decoder has 8 heads with dmodel = 1936 and
+dropout = 0.1. The 1936-d input is projected to 2048-d
+by the feed-forward network, then projected to 1936-d
+again after ReLU activation.
+4.3. Quantitative Results and Comparison
+Table 1 shows that our model outperforms state-of-the-
+art image-based methods in all metrics following With
+Constraint, Semi Constraint and No Constraint. For the
+fair comparison, all methods share the identical object de-
+tector which provides feature maps and region proposals of
+the same quality.
+The bold numbers denote the best result in any column.
+With the help of temporal dependencies our model im-
+proves state-of-the-art (GPS-Net [40]) 1.9% on PredCLS-
+16356
+
+
+Method
+With Constraint
+No Constraint
+PredCLS
+SGCLS
+SGDET
+PredCLS
+SGCLS
+SGDET
+R@10
+R@20
+R@50
+R@10
+R@20
+R@50
+R@10
+R@20
+R@50
+R@10
+R@20
+R@50
+R@10
+R@20
+R@50
+R@10
+R@20
+R@50
+VRD[42]
+51.7
+54.7
+54.7
+32.4
+33.3
+33.3
+19.2
+24.5
+26.0
+59.6
+78.5
+99.2
+39.2
+49.8
+52.6
+19.1
+28.8
+40.5
+Motif Freq[65]
+62.4
+65.1
+65.1
+40.8
+41.9
+41.9
+23.7
+31.4
+33.3
+73.4
+92.4
+99.6
+50.4
+60.6
+64.2
+22.8
+34.3
+46.4
+MSDN[35]
+65.5
+68.5
+68.5
+43.9
+45.1
+45.1
+24.1
+32.4
+34.5
+74.9
+92.7
+99.0
+51.2
+61.8
+65.0
+23.1
+34.7
+46.5
+VCTREE[51]
+66.0
+69.3
+69.3
+44.1
+45.3
+45.3
+24.4
+32.6
+34.7
+75.5
+92.9
+99.3
+52.4
+62.0
+65.1
+23.9
+35.3
+46.8
+RelDN[66]
+66.3
+69.5
+69.5
+44.3
+45.4
+45.4
+24.5
+32.8
+34.9
+75.7
+93.0
+99.0
+52.9
+62.4
+65.1
+24.1
+35.4
+46.8
+GPS-Net[40]
+66.8
+69.9
+69.9
+45.3
+46.5
+46.5
+24.7
+33.1
+35.1
+76.0
+93.6
+99.5
+53.6
+63.3
+66.0
+24.4
+35.7
+47.3
+STTran
+68.6
+71.8
+71.8
+46.4
+47.5
+47.5
+25.2
+34.1
+37.0
+77.9
+94.2
+99.1
+54.0
+63.7
+66.4
+24.6
+36.2
+48.8
+Table 1: Comparison with state-of-the-art image-based scene graph generation methods on Action Genome [22].The same
+object detector is used in all baselines for fair comparison. STTran has the best performance in all metrics. Note that the
+evaluation results of baselines are different from [22] since we adopted a more reasonable relationship output method, more
+details are provided in the supplementary material.
+Method
+Semi Constraint
+PredCLS
+SGCLS
+SGDET
+R@10
+R@20
+R@50
+R@10
+R@20
+R@50
+R@10
+R@20
+R@50
+VRD[42]
+55.5
+64.9
+65.2
+36.2
+39.7
+40.1
+19.0
+27.1
+32.4
+Motif Freq[65]
+65.7
+74.1
+74.5
+45.5
+49.3
+49.5
+22.9
+33.7
+39.0
+MSDN[35]
+69.6
+78.9
+79.9
+48.3
+54.1
+54.5
+23.2
+34.2
+41.5
+VCTREE[51]
+70.1
+78.2
+79.6
+49.0
+53.7
+54.0
+23.7
+34.8
+40.4
+RelDN[66]
+70.7
+78.8
+80.3
+49.4
+53.9
+54.1
+24.1
+35.0
+40.7
+GPS-Net[40]
+71.3
+81.2
+82.0
+50.2
+55.0
+55.2
+24.5
+35.3
+41.9
+STTran
+73.2
+83.1
+84.0
+51.2
+56.5
+56.8
+24.6
+35.9
+44.0
+Table 2: Evaluation results of Semi Constraint which in-
+dicates the relationship between object pair is regarded as
+positive if the confidence score is higher than the threshold.
+R@20, 1.0% on SGCLS-R@20 and 1.0% on SGDET-
+R@20 for the strategy With Constraint, which shows that
+STTran performs better than image-based baselines in pre-
+dicting the most important relationships between an object
+pair. Our model also has excellent performance (see Table
+2): 1.9% on PredCLS-R@20, 1.5% on SGCLS-R@20 and
+0.6% improvement on SGDET-R@20 for Semi Constraint
+that allows multiple relationships between a subject-object
+pair. For No Constraint, STTran outperforms other meth-
+ods in all settings except PredCLS-R@50. Due to the small
+number of object pairs and the large number (50) of chances
+to guess, the results in this column are unstable and uncon-
+vincing. Motif Freq [65] which is very dependent on statis-
+tics achieves the highest score. However, the results become
+reliable with the less prediction number K = [10, 20].
+Note that there is no difference between PredCLS-R@20
+and PredCLS-R@50 for With Constraint because of a lim-
+ited number of object pairs and edge restriction. This also
+happens on SGCLS. Compared with PredCLS or SGCLS,
+the gap of SGDET between STTran and other methods is
+narrowed since the increased false object proposals cause
+interference, especially for Semi Constraint and No Con-
+straint using small K. Furthermore, the reproduced results
+of some methods are different from [22] since a more rea-
+sonable relationship output method is adopted and the ob-
+ject detectors are different.
+In Semi Constraint, the threshold of confidence in the
+relationship is set to a fixed number (0.9) in the exper-
+iments.
+In order to study the impact of such threshold
+in Semi Constraint on Recall@K, the R@20-Threshold
+curves of [35, 66, 40] and STTran are shown in Fig. 3.
+STTran consistently outperforms all three models at all
+threshold levels from 0.7 to 0.95. The high threshold sup-
+presses the R@20 values except in SGDET since there are
+more pair proposals.
+78
+79
+80
+81
+82
+83
+84
+PredCLS
+STTran
+GPSNET
+RelDN
+MSDN
+53.5
+54.0
+54.5
+55.0
+55.5
+56.0
+56.5
+57.0
+SGCLS
+STTran
+GPSNET
+RelDN
+MSDN
+0.70
+0.75
+0.80
+0.85
+0.90
+0.95
+Threshold of Semi-Constraint
+34.0
+34.5
+35.0
+35.5
+36.0
+SGDET
+STTran
+GPSNET
+RelDN
+MSDN
+R@20 (Semi Constraint)
+Figure 3: R@20-Threshold Curves in three standard tasks
+(PredCLS/SGCLS/SGDET) for Semi Constraint.
+4.4. Temporal Dependency Analysis
+Compared to the previous image-based scene graph gen-
+eration, a dynamic scene graph has additional temporal de-
+pendencies that can be utilized. We discuss whether tempo-
+16357
+
+
+ral dependencies can improve the relationship inference and
+validate that our proposed method utilize temporal depen-
+dencies. In this subsection, we measure PredCLS-R@20
+(With Constraint) as the performance indicator that shows
+the ability of single relationship classification strictly.
+Is temporal dependence easy to use?
+Spatial context
+plays a relevant role in scene graph generation as validated
+by several image-based methods [65, 40]. To explore the ef-
+fectiveness of temporal dependencies, we graft the widely-
+used recurrent network, LSTM onto the baselines in Table
+3 as follows. Before forwarding the feature vectors into the
+final classifiers, the entire vectors representing relationships
+in the video are organized as a sequence and processed by
+LSTM.
+Table 3 shows all baselines can gain more or less from
+the temporal dependencies. For Motif Freq [65], PredCLS-
+R@20 increases from 65.1% to 65.2% slightly probably due
+to the relatively simple feature representation. Meanwhile,
+the score of GPS-Net [40] is improved from 69.9% to 70.4%
+significantly. The experiment shows that temporal depen-
+dencies are helpful for scene graph generation. However,
+the previous methods were designed for static images. This
+is why we propose Spatial-Temporal Transformer (STTran)
+to make better use of temporal dependencies.
+Method
+PredCLS-R@20
+original
++LSTM
+Motif Freq[65]
+65.1
+65.2
+MSDN[35]
+68.5
+68.8
+RelDN[66]
+69.5
+69.7
+GPS-Net[40]
+69.9
+70.4
+Table 3: We integrate LSTMs to process the relationship
+features before forwarding them into the classifier into some
+representative baselines. All baselines are improved with
+temporal dependencies but worse than our STTran.
+holding
+person
+person
+food
+food
+touching
+(a) spatial encoder only
+holding
+person
+food
+person
+food
+eating
+(b) complete STTran
+Figure 4: Two relationship instances respectively generated
+by the spatial encoder and STTran. (a) Spatial encoder pre-
+dicts the wrong relationship only with the spatial context in
+the second frame while (b) STTran can infer more accurate
+results with the help of temporal dependencies.
+Can STTran really understand temporal dependencies?
+In order to verify that STTran really improves performance
+through temporal dependencies in the video, instead of us-
+ing clearer feature representation or powerful multi-head at-
+tention module, we trained our model with the processed
+training set and show the results in Table 4.
+We randomly sample 1/3 videos in the training set and
+shuffle/reverse them. Meanwhile, the test set remains un-
+changed.
+As shown in Table 4, PredCLS-R@20 (With
+Constraint) drops significantly from 71.8% to 71.0%,
+when one-third of the training videos are reversed, which
+is equivalent to adding noise in the temporal information.
+Moreover, shuffled videos indicate the temporal informa-
+tion is completely broken and the noise is further amplified.
+The experimental result (first row) is in line with expecta-
+tions: PredCLS-R@20 drops to 70.6%. The experiments
+demonstrate where the improvement comes from and vali-
+date that the temporal dependencies are learned in STTran.
+Normal Video
+Processed Video
+Processing
+PredCLS-R@20
+2/3
+1/3
+shuffle
+70.6
+2/3
+1/3
+reverse
+71.0
+1
+-
+-
+71.8
+Table 4: We shuffle/reverse one-third of the videos in the
+training set to explore the sensitivity of the model to frame
+sequence. By disorganizing the temporal information via
+shuffling or reversing the video sequence, the performance
+of the model degrades accordingly as expected.
+4.5. Ablation Study
+In our Spatial-Temporal Transformer, two modules are
+proposed, a Spatial Encoder and Temporal Decoder. Fur-
+thermore, we integrate the temporal position into the re-
+lationship representations with the frame encoding in the
+Temporal Decoder. In order to clarify how these modules
+contribute to the performance, we ablate different compo-
+nents and present the results in Table 5. We adopt PredCLS-
+R@20 and SGDET-R@20 as the metrics with With Con-
+straint and Semi Constraint. PredCLS shows the ability of
+relationship prediction intuitively while SGDET indicates
+the performance of scene graph generation.
+When only the spatial encoder is enabled, the model
+works the same as the image-based method and also
+has a similar performance as RelDN [66].
+The isolated
+temporal decoder (second row) boosts the performance
+significantly with the additional information from other
+frames.
+PredCLS-R@20 is improved slightly when the
+encoder and decoder both work whereas the improvement
+of SGDET-R@20 is limited by the object detection back-
+bone. The learned frame encoding helps STTran fully un-
+derstand the temporal dependencies and has a strong, pos-
+itive effect both on PredCLS-R@20 and SGDET-R@20
+16358
+
+
+person
+bottle
+floor
+table
+sit on
+beneath
+hold
+touch
+in front of
+in front of
+drink from
+look at
+not look at
+not look at
+person
+bottle
+floor
+table
+sit on
+beneath
+hold
+touch
+in front of
+in front of
+not look at
+not look at
+not look at
+person
+bottle
+floor
+table
+sit on
+beneath
+hold
+touch
+in front of
+in front of
+drink from
+not look at
+not look at
+not look at
+person
+bottle
+floor
+table
+sit on
+beneath
+hold
+touch
+in front of
+in front of
+drink from
+not look at
+not look at
+not contact
+person
+bottle
+floor
+table
+sit on
+beneath
+touch
+on side of
+not contact
+not look at
+not look at
+not look at
+in front of
+notebook
+touch
+look at
+in front of
+person
+medicine
+notebook
+table
+touch
+in front of
+touch
+in front of
+look at
+not look at
+in front of
+notebook
+touch
+look at
+in front of
+person
+notebook
+table
+touch
+in front of
+touch
+look at
+not look at
+in front of
+notebook
+touch
+look at
+in front of
+hold
+person
+notebook
+table
+touch
+in front of
+touch
+look at
+not look at
+in front of
+notebook
+touch
+look at
+in front of
+hold
+Frame
+Ground Truth
+With Constraint
+Semi Constraint
+No Constraint
+Figure 5: Qualitative results for dynamic scene graph generation. The scene graphs from STTran are generated with the
+top-10 confident relationship predictions with different Strategies. The green box is the undetected ground truth. The melon
+and gray colors indicate true positive and false positive respectively. Correct relationships are colored with light blue for
+clarity and ing is omitted for brevity. It shows poor object detection results reduce the performance and the result of Semi
+Constraint is closer to the ground truth.
+while the fixed sinusoidal encoding performs unsatisfac-
+torily.
+Two instances respectively predicted by the spa-
+tial encoder only and the complete STTran are shown in
+Fig. 4.
+Without temporal dependencies, the spatial en-
+coder mistakenly predicts <person-eating-food>
+as <person-touching-food> in the second frame
+whereas STTran infers the relationship correctly. This ex-
+plicitly proves that STTran can utilize temporal context to
+improve scene graph generation.
+Spatial
+Temporal
+Frame
+PredCLS-R@20
+SGDET-R@20
+Encoder
+Decoder
+Encoding
+With
+Semi
+With
+Semi
+✓
+-
+-
+69.6
+78.7
+32.9
+35.1
+-
+✓
+-
+71.0
+82.2
+33.7
+35.5
+✓
+✓
+-
+71.3
+82.7
+33.8
+35.6
+✓
+✓
+sinusoidal
+71.3
+82.8
+33.9
+35.7
+✓
+✓
+learned
+71.8
+83.1
+34.1
+35.9
+Table 5: Ablation Study on our STTran. ✓indicates the cor-
+responding module is enabled while −indicates disabled.
+We also compare the effectiveness of sinusoidal and learned
+positional encoding.
+4.6. Qualitative Results
+Fig. 5 shows the qualitative results for the dynamic scene
+graph generation. The five columns from left to right are
+RGB frame, scene graph generated by ground truth, scene
+graph generated with the top-10 confident relationship pre-
+dictions with the Strategies With Constraint, Semi Con-
+straint and No Constraint. The melon color indicates truth
+positive whereas gray indicates false positive. The green
+box is the ground truth not detected by the detector.
+In
+the first row, two false positives with high object detec-
+tion confidence (medicine and notebook) result in wrong
+predictions among the top-10 relationships. All the top-
+10 confident relationships following three strategies are of
+high quality in the second row when the object detection is
+successful. <person-drinking from-bottle> in
+the third column is lost because With Constraint only al-
+lows at most one relationship between each subject-object
+pair for each type of relationship while <person-not
+contacting-bottle> replaces the attention relation-
+ship between person and bottle in the top-10 confident list
+when using No Constraint. The two frames in Fig. 5 are
+not adjacent since the detected persons overlap with the
+ground truth IoU < 0.5 in the frames between them.
+5. Conclusion
+In this paper, we propose Spatial-Temporal Transformer
+(STTran) for dynamic scene graph generation whose en-
+coder extracts spatial context within a frame and decoder
+captures the temporal dependencies between frames. Dis-
+tinct from single-label losses in previous works, we utilize a
+multi-label margin loss and introduce a new strategy to gen-
+erate scene graphs. Several experiments demonstrate that
+temporal context has a positive effect on relationship pre-
+diction. We obtain state-of-the-art results for the dynamic
+scene graph generation task on the Action Genome dataset.
+Acknowledgements
+This work was supported by the
+BMBF (grant no.01DD20003), DFG PhoenixD (EXC
+2122) and COVMAP (RO 2497/12-2).
+16359
+
+
+References
+[1] Peter Anderson, Basura Fernando, Mark Johnson, and
+Stephen Gould. Spice: Semantic propositional image cap-
+tion evaluation. In European conference on computer vision,
+pages 382–398. Springer, 2016. 2
+[2] Peter Anderson, Xiaodong He, Chris Buehler, Damien
+Teney, Mark Johnson, Stephen Gould, and Lei Zhang.
+Bottom-up and top-down attention for image captioning and
+visual question answering.
+In CVPR, pages 6077–6086,
+2018. 2
+[3] Oron Ashual and Lior Wolf.
+Specifying object attributes
+and relations in interactive scene generation. In Proceedings
+of the IEEE/CVF International Conference on Computer Vi-
+sion, pages 4561–4569, 2019. 1
+[4] Fabian Caba Heilbron, Victor Escorcia, Bernard Ghanem,
+and Juan Carlos Niebles. Activitynet: A large-scale video
+benchmark for human activity understanding. In Proceed-
+ings of the ieee conference on computer vision and pattern
+recognition, pages 961–970, 2015. 2
+[5] Nicolas Carion, Francisco Massa, Gabriel Synnaeve, Nicolas
+Usunier, Alexander Kirillov, and Sergey Zagoruyko. End-to-
+end object detection with transformers. In European Confer-
+ence on Computer Vision, pages 213–229. Springer, 2020. 2,
+4
+[6] Joao Carreira and Andrew Zisserman.
+Quo vadis, action
+recognition? a new model and the kinetics dataset. In CVPR,
+pages 6299–6308, 2017. 2, 3
+[7] Vincent S Chen, Paroma Varma, Ranjay Krishna, Michael
+Bernstein, Christopher Re, and Li Fei-Fei. Scene graph pre-
+diction with limited labels. In Proceedings of the IEEE/CVF
+International Conference on Computer Vision, pages 2580–
+2590, 2019. 2
+[8] Yuren
+Cong,
+Hanno
+Ackermann,
+Wentong
+Liao,
+Michael Ying Yang,
+and Bodo Rosenhahn.
+Nodis:
+Neural ordinary differential scene understanding. In ECCV,
+pages 636–653, 2020. 2
+[9] Bo Dai, Yuqi Zhang, and Dahua Lin. Detecting visual re-
+lationships with deep relational networks. In CVPR, pages
+3076–3086, 2017. 2
+[10] Jacob Devlin, Ming-Wei Chang, Kenton Lee, and Kristina
+Toutanova.
+Bert:
+Pre-training of deep bidirectional
+transformers for language understanding.
+arXiv preprint
+arXiv:1810.04805, 2018. 2
+[11] Jeffrey Donahue, Lisa Anne Hendricks, Sergio Guadarrama,
+Marcus Rohrbach, Subhashini Venugopalan, Kate Saenko,
+and Trevor Darrell. Long-term recurrent convolutional net-
+works for visual recognition and description. In Proceed-
+ings of the IEEE conference on computer vision and pattern
+recognition, pages 2625–2634, 2015. 2
+[12] Alexey Dosovitskiy, Lucas Beyer, Alexander Kolesnikov,
+Dirk Weissenborn, Xiaohua Zhai, Thomas Unterthiner,
+Mostafa Dehghani, Matthias Minderer, Georg Heigold, Syl-
+vain Gelly, et al. An image is worth 16x16 words: Trans-
+formers for image recognition at scale. In ICLR, 2021. 2
+[13] Lizhao Gao, Bo Wang, and Wenmin Wang. Image caption-
+ing with scene-graph based semantic concepts. In Proceed-
+ings of the 2018 10th International Conference on Machine
+Learning and Computing, pages 225–229, 2018. 1
+[14] Rohit Girdhar, Joao Carreira, Carl Doersch, and Andrew Zis-
+serman. Video action transformer network. In CVPR, pages
+244–253, 2019. 2
+[15] Georgia Gkioxari, Ross Girshick, Piotr Doll´ar, and Kaiming
+He. Detecting and recognizing human-object interactions.
+In Proceedings of the IEEE Conference on Computer Vision
+and Pattern Recognition, pages 8359–8367, 2018. 1
+[16] Kaiming He, Georgia Gkioxari, Piotr Doll´ar, and Ross Gir-
+shick. Mask r-cnn. In Proceedings of the IEEE international
+conference on computer vision, pages 2961–2969, 2017. 3
+[17] Kaiming He, Xiangyu Zhang, Shaoqing Ren, and Jian Sun.
+Deep residual learning for image recognition. In Proceed-
+ings of the IEEE conference on computer vision and pattern
+recognition, pages 770–778, 2016. 5
+[18] Sen He, Wentong Liao, Hamed R Tavakoli, Michael Yang,
+Bodo Rosenhahn, and Nicolas Pugeault. Image captioning
+through image transformer. In ACCV, 2020. 2
+[19] Sen He, Wentong Liao, Michael Ying Yang, Yongxin Yang,
+Yi-Zhe Song, Bodo Rosenhahn, and Tao Xiang. Context-
+aware layout to image generation with enhanced object ap-
+pearance. In Proceedings of the IEEE/CVF Conference on
+Computer Vision and Pattern Recognition, pages 15049–
+15058, 2021. 2
+[20] Sepp Hochreiter and J¨urgen Schmidhuber. Long short-term
+memory. Neural computation, 9(8):1735–1780, 1997. 2
+[21] Andrea Hornakova, Roberto Henschel, Bodo Rosenhahn,
+and Paul Swoboda.
+Lifted disjoint paths with application
+in multiple object tracking. In International Conference on
+Machine Learning, pages 4364–4375. PMLR, 2020. 2
+[22] Jingwei Ji, Ranjay Krishna, Li Fei-Fei, and Juan Carlos
+Niebles. Action genome: Actions as compositions of spatio-
+temporal scene graphs.
+In Proceedings of the IEEE/CVF
+Conference on Computer Vision and Pattern Recognition,
+pages 10236–10247, 2020. 1, 2, 5, 6
+[23] Shuiwang Ji, Wei Xu, Ming Yang, and Kai Yu. 3d convolu-
+tional neural networks for human action recognition. TPAMI,
+35(1):221–231, 2012. 2
+[24] Justin Johnson, Agrim Gupta, and Li Fei-Fei. Image gener-
+ation from scene graphs. In Proceedings of the IEEE con-
+ference on computer vision and pattern recognition, pages
+1219–1228, 2018. 1, 2
+[25] Justin
+Johnson,
+Bharath
+Hariharan,
+Laurens
+Van
+Der Maaten, Judy Hoffman, Li Fei-Fei, C Lawrence Zitnick,
+and Ross Girshick.
+Inferring and executing programs for
+visual reasoning. In Proceedings of the IEEE International
+Conference on Computer Vision, pages 2989–2998, 2017. 1,
+2
+[26] Justin Johnson, Ranjay Krishna, Michael Stark, Li-Jia Li,
+David Shamma, Michael Bernstein, and Li Fei-Fei. Image
+retrieval using scene graphs. In Proceedings of the IEEE con-
+ference on computer vision and pattern recognition, pages
+3668–3678, 2015. 1, 2
+[27] Will Kay, Joao Carreira, Karen Simonyan, Brian Zhang,
+Chloe Hillier, Sudheendra Vijayanarasimhan, Fabio Viola,
+16360
+
+
+Tim Green, Trevor Back, Paul Natsev, et al. The kinetics hu-
+man action video dataset. arXiv preprint arXiv:1705.06950,
+2017. 2
+[28] Florian Kluger, Hanno Ackermann, Michael Ying Yang, and
+Bodo Rosenhahn. Temporally consistent horizon lines. In
+2020 IEEE International Conference on Robotics and Au-
+tomation (ICRA), pages 3161–3167. IEEE, 2020. 2
+[29] Ranjay Krishna, Yuke Zhu, Oliver Groth, Justin Johnson,
+Kenji Hata, Joshua Kravitz, Stephanie Chen, Yannis Kalan-
+tidis, Li-Jia Li, David A Shamma, et al.
+Visual genome:
+Connecting language and vision using crowdsourced dense
+image annotations. International journal of computer vision,
+123(1):32–73, 2017. 1, 2
+[30] Christopher A Kurby and Jeffrey M Zacks. Segmentation in
+the perception and memory of events. Trends in cognitive
+sciences, 12(2):72–79, 2008. 2
+[31] Alina Kuznetsova, Hassan Rom, Neil Alldrin, Jasper Ui-
+jlings, Ivan Krasin, Jordi Pont-Tuset, Shahab Kamali, Stefan
+Popov, Matteo Malloci, Alexander Kolesnikov, et al. The
+open images dataset v4. IJCV, pages 1–26, 2020. 2
+[32] Liunian Harold Li, Mark Yatskar, Da Yin, Cho-Jui Hsieh,
+and Kai-Wei Chang. What does bert with vision look at? In
+ACL, pages 5265–5275, 2020. 2
+[33] Shijie Li, Jinhui Yi, Yazan Abu Farha, and Juergen Gall.
+Pose refinement graph convolutional network for skeleton-
+based action recognition.
+IEEE Robotics and Automation
+Letters, 6(2):1028–1035, 2021. 2
+[34] Yikang Li, Wanli Ouyang, Bolei Zhou, Jianping Shi, Chao
+Zhang, and Xiaogang Wang. Factorizable net: an efficient
+subgraph-based framework for scene graph generation. In
+ECCV, pages 335–351, 2018. 2
+[35] Yikang Li, Wanli Ouyang, Bolei Zhou, Kun Wang, and Xi-
+aogang Wang. Scene graph generation from objects, phrases
+and region captions. In Proceedings of the IEEE Interna-
+tional Conference on Computer Vision, pages 1261–1270,
+2017. 2, 6, 7
+[36] Xiaodan Liang, Lisa Lee, and Eric P Xing. Deep variation-
+structured reinforcement learning for visual relationship and
+attribute detection. In Proceedings of the IEEE conference
+on computer vision and pattern recognition, pages 848–857,
+2017. 2
+[37] Wentong Liao, Cuiling Lan, Michael Ying Yang, Wen-
+jun Zeng, and Bodo Rosenhahn.
+Target-tailored source-
+transformation for scene graph generation. In IEEE Con-
+ference on Computer Vision and Pattern Recognition Work-
+shops, 2021. 2
+[38] Wentong
+Liao,
+Bodo
+Rosenhahn,
+Ling
+Shuai,
+and
+Michael Ying Yang. Natural language guided visual rela-
+tionship detection. In IEEE Conference on Computer Vision
+and Pattern Recognition Workshops, 2019. 2
+[39] Ji Lin, Chuang Gan, and Song Han. Tsm: Temporal shift
+module for efficient video understanding.
+In Proceedings
+of the IEEE/CVF International Conference on Computer Vi-
+sion, pages 7083–7093, 2019. 2
+[40] Xin Lin, Changxing Ding, Jinquan Zeng, and Dacheng Tao.
+Gps-net: Graph property sensing network for scene graph
+generation.
+In Proceedings of the IEEE/CVF Conference
+on Computer Vision and Pattern Recognition, pages 3746–
+3753, 2020. 2, 5, 6, 7
+[41] Ilya Loshchilov and Frank Hutter. Decoupled weight decay
+regularization. arXiv preprint arXiv:1711.05101, 2017. 5
+[42] Cewu Lu, Ranjay Krishna, Michael Bernstein, and Li Fei-
+Fei. Visual relationship detection with language priors. In
+European conference on computer vision, pages 852–869.
+Springer, 2016. 2, 5, 6
+[43] Jiasen Lu, Dhruv Batra, Devi Parikh, and Stefan Lee. Vilbert:
+Pretraining task-agnostic visiolinguistic representations for
+vision-and-language tasks. In NeurIPS, volume 32, 2019. 2
+[44] Alec Radford, Jeffrey Wu, Rewon Child, David Luan, Dario
+Amodei, and Ilya Sutskever. Language models are unsuper-
+vised multitask learners. OpenAI blog, 1(8):9, 2019. 2
+[45] Shaoqing Ren, Kaiming He, Ross Girshick, and Jian Sun.
+Faster r-cnn: Towards real-time object detection with region
+proposal networks. arXiv preprint arXiv:1506.01497, 2015.
+2, 3, 5
+[46] Sebastian Schuster, Ranjay Krishna, Angel Chang, Li Fei-
+Fei, and Christopher D Manning. Generating semantically
+precise scene graphs from textual descriptions for improved
+image retrieval. In Proceedings of the fourth workshop on
+vision and language, pages 70–80, 2015. 1, 2
+[47] Gunnar A Sigurdsson, G¨ul Varol, Xiaolong Wang, Ali
+Farhadi, Ivan Laptev, and Abhinav Gupta.
+Hollywood in
+homes: Crowdsourcing data collection for activity under-
+standing.
+In European Conference on Computer Vision,
+pages 510–526. Springer, 2016. 2, 5
+[48] Karen Simonyan and Andrew Zisserman. Two-stream con-
+volutional networks for action recognition in videos. arXiv
+preprint arXiv:1406.2199, 2014. 2
+[49] Nitish Srivastava, Elman Mansimov, and Ruslan Salakhudi-
+nov. Unsupervised learning of video representations using
+lstms.
+In International conference on machine learning,
+pages 843–852. PMLR, 2015. 2
+[50] Weijie Su, Xizhou Zhu, Yue Cao, Bin Li, Lewei Lu, Furu
+Wei, and Jifeng Dai. Vl-bert: Pre-training of generic visual-
+linguistic representations. In ICLR, 2020. 2
+[51] Kaihua Tang, Hanwang Zhang, Baoyuan Wu, Wenhan Luo,
+and Wei Liu. Learning to compose dynamic tree structures
+for visual contexts. In CVPR, pages 6619–6628, 2019. 2, 6
+[52] Hugo Touvron, Matthieu Cord, Matthijs Douze, Francisco
+Massa, Alexandre Sablayrolles, and Herv´e J´egou. Training
+data-efficient image transformers & distillation through at-
+tention. arXiv preprint arXiv:2012.12877, 2020. 2
+[53] Du Tran, Lubomir Bourdev, Rob Fergus, Lorenzo Torre-
+sani, and Manohar Paluri. Learning spatiotemporal features
+with 3d convolutional networks. In ICCV, pages 4489–4497,
+2015. 2
+[54] Ashish Vaswani, Noam Shazeer, Niki Parmar, Jakob Uszko-
+reit, Llion Jones, Aidan N Gomez, Lukasz Kaiser, and Il-
+lia Polosukhin. Attention is all you need. arXiv preprint
+arXiv:1706.03762, 2017. 2, 3, 4
+[55] Wenbin Wang, Ruiping Wang, Shiguang Shan, and Xilin
+Chen. Exploring context and visual pattern of relationship
+for scene graph generation.
+In CVPR, pages 8188–8197,
+2019. 2
+16361
+
+
+[56] Xiaolong Wang, Ross Girshick, Abhinav Gupta, and Kaim-
+ing He. Non-local neural networks. In CVPR, pages 7794–
+7803, 2018. 3
+[57] Yuqing Wang, Zhaoliang Xu, Xinlong Wang, Chunhua Shen,
+Baoshan Cheng, Hao Shen, and Huaxia Xia.
+End-to-
+end video instance segmentation with transformers. arXiv
+preprint arXiv:2011.14503, 2020. 2
+[58] Danfei Xu, Yuke Zhu, Christopher B Choy, and Li Fei-Fei.
+Scene graph generation by iterative message passing.
+In
+CVPR, pages 5410–5419, 2017. 2
+[59] Kelvin Xu, Jimmy Ba, Ryan Kiros, Kyunghyun Cho, Aaron
+Courville, Ruslan Salakhudinov, Rich Zemel, and Yoshua
+Bengio. Show, attend and tell: Neural image caption gen-
+eration with visual attention. In International conference on
+machine learning, pages 2048–2057. PMLR, 2015. 2
+[60] Jianwei Yang, Jiasen Lu, Stefan Lee, Dhruv Batra, and Devi
+Parikh. Graph r-cnn for scene graph generation. In ECCV,
+pages 670–685, 2018. 2
+[61] Michael Ying Yang, Wentong Liao, Hanno Ackermann, and
+Bodo Rosenhahn. On support relations and semantic scene
+graphs. ISPRS Journal of Photogrammetry and Remote Sens-
+ing, 131:15–25, 2017. 2
+[62] Xu Yang, Kaihua Tang, Hanwang Zhang, and Jianfei Cai.
+Auto-encoding scene graphs for image captioning. In Pro-
+ceedings of the IEEE/CVF Conference on Computer Vision
+and Pattern Recognition, pages 10685–10694, 2019. 1, 2
+[63] Zekun Yang, Noa Garcia, Chenhui Chu, Mayu Otani, Yuta
+Nakashima, and Haruo Takemura. Bert representations for
+video question answering.
+In WACV, pages 1556–1565,
+2020. 2
+[64] Ruichi Yu, Ang Li, Vlad I Morariu, and Larry S Davis. Vi-
+sual relationship detection with internal and external linguis-
+tic knowledge distillation. In ICCV, pages 1974–1982, 2017.
+2
+[65] Rowan Zellers, Mark Yatskar, Sam Thomson, and Yejin
+Choi. Neural motifs: Scene graph parsing with global con-
+text. In Proceedings of the IEEE Conference on Computer
+Vision and Pattern Recognition, pages 5831–5840, 2018. 2,
+6, 7
+[66] Ji Zhang, Kevin J Shih, Ahmed Elgammal, Andrew Tao,
+and Bryan Catanzaro. Graphical contrastive losses for scene
+graph parsing. In Proceedings of the IEEE/CVF Conference
+on Computer Vision and Pattern Recognition, pages 11535–
+11543, 2019. 2, 6, 7
+16362

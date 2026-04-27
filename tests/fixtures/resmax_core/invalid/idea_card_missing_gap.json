@@ -1,0 +1,54 @@
+{
+  "schema_version": "0.1.0",
+  "state_id": "idea_card:eeeeeeee",
+  "created_at": "2026-04-27T00:17:00Z",
+  "input_hash": "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+  "parent_state_ids": [],
+  "producer": {"name": "phase0-fixture", "version": "0.1.0", "run_id": "fixture"},
+  "idea_id": "idea-bad",
+  "title": "Invalid idea without gap lineage.",
+  "source_claim_ids": [],
+  "evidence_ids": [],
+  "closest_work_ids": [],
+  "generation_sources": ["gap_driven"],
+  "core_delta": "Missing gap lineage.",
+  "primary_claim": "This should fail because source_gap_ids is missing.",
+  "mechanism": "Invalid fixture.",
+  "why_now": "Invalid fixture.",
+  "direct_baselines": [],
+  "method_donors": [],
+  "benchmark_opportunities": [],
+  "estimated_compute": "unknown_follow_up_required",
+  "estimated_timeline": "blocked_until_evidence_recovered",
+  "expected_failure_modes": ["Missing source gap lineage."],
+  "reviewer_attack_points": [],
+  "strongest_rejection_case": "Missing source gap lineage.",
+  "cheapest_falsification": {
+    "claim_to_falsify": "Invalid fixture.",
+    "minimal_test": "Recover source gap id.",
+    "falsifies_if": "No source gap can be recovered.",
+    "required_baseline_ids": [],
+    "expected_cost": "unknown_follow_up_required"
+  },
+  "lineage": {
+    "parent_gap_ids": [],
+    "parent_idea_ids": [],
+    "mutation_operator": "gap_driven_compile",
+    "mutation_reason": "Invalid fixture.",
+    "status": "reject"
+  },
+  "roi": {
+    "positive_signals": {},
+    "difficulty_signals": {},
+    "unknowns": [],
+    "reviewer_blockers": [],
+    "confidence": "low"
+  },
+  "duplicate_memory_matches": [],
+  "readiness": {
+    "phase6_review_ready": false,
+    "experiment_blueprint_ready": false,
+    "not_ready_reasons": ["missing_source_gap_ids"]
+  },
+  "status": "insufficient_evidence"
+}

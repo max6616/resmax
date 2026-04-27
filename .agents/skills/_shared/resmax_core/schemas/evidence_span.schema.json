@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "resmax://schemas/evidence_span",
+  "title": "EvidenceSpan",
+  "schema_version": "0.1.0",
+  "type": "object",
+  "required": ["schema_version", "state_id", "created_at", "input_hash", "parent_state_ids", "producer", "paper_id", "span_type", "text", "source", "source_weight", "evidence_status"],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {"type": "string", "enum": ["0.1.0"]},
+    "state_id": {"type": "string", "pattern": "^[a-z][a-z0-9_]*:[0-9a-f]{8,64}$"},
+    "created_at": {"type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}T"},
+    "input_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "parent_state_ids": {"type": "array", "items": {"type": "string"}},
+    "producer": {"type": "object", "required": ["name"], "additionalProperties": false, "properties": {"name": {"type": "string", "minLength": 1}, "version": {"type": "string"}, "run_id": {"type": "string"}}},
+    "paper_id": {"type": "string", "minLength": 1},
+    "span_type": {"type": "string", "enum": ["abstract", "review", "metadata", "full_text", "code", "benchmark"]},
+    "text": {"type": "string"},
+    "source": {
+      "type": "object",
+      "required": ["kind", "locator", "status"],
+      "additionalProperties": false,
+      "properties": {
+        "kind": {"type": "string", "enum": ["accepted_index", "review_cache", "pdf_text", "paper_source", "mineru_markdown", "manual", "web"]},
+        "locator": {"type": "string"},
+        "status": {"type": "string", "enum": ["unknown", "not_found", "not_applicable", "insufficient_evidence", "supported", "contradicted", "mixed"]}
+      }
+    },
+    "source_weight": {"type": "string", "enum": ["unknown", "not_applicable", "primary", "secondary", "tertiary", "weak"]},
+    "evidence_status": {"type": "string", "enum": ["unknown", "not_found", "not_applicable", "insufficient_evidence", "supported", "contradicted", "mixed"]},
+    "source_type": {"type": "string", "enum": ["arxiv_tex", "official_pdf_text", "mineru_markdown", "manual_source", "accepted_index", "review_cache", "web_snippet", "unknown"]},
+    "section": {"type": "string"},
+    "locator": {"type": "string"},
+    "quote_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "parser": {"type": "string"},
+    "extraction_status": {"type": "string", "enum": ["extracted", "discarded", "missing_source", "missing_pdf", "not_applicable"]},
+    "discard_reason": {"type": "string"}
+  }
+}

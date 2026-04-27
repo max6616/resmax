@@ -1,0 +1,30 @@
+{
+  "schema_version": "0.1.0",
+  "state_id": "research_spec:11111111",
+  "created_at": "2026-04-27T00:00:00Z",
+  "input_hash": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+  "parent_state_ids": [],
+  "producer": {"name": "phase3-fixture", "version": "0.1.0", "run_id": "fixture"},
+  "raw_intent": "graph reasoning with low compute benchmark leverage",
+  "problem_anchor": "graph reasoning low compute benchmark leverage",
+  "target_venue": "unknown",
+  "timeline": "unknown",
+  "compute_budget": "unknown",
+  "team_size": "unknown",
+  "non_goals": ["full-text extraction", "final idea generation", "experiment plan"],
+  "human_gates": ["after_macro_survey", "before_targeted_full_text", "before_idea_generation"],
+  "budget_policy": {
+    "macro_max_candidates": 20,
+    "max_targeted_evidence_candidates": 30,
+    "evidence_expansion_requires_human_gate": true
+  },
+  "research_question": "What evidence-backed graph reasoning gaps are visible?",
+  "objective": "Build a Phase 3 research pack without ideas or recommendations.",
+  "scope": {
+    "included_topics": ["graph reasoning"],
+    "excluded_topics": ["final idea generation", "experiment plan"]
+  },
+  "roi_objectives": ["benchmark_leverage", "low_compute_cost", "review_risk_visibility"],
+  "unknowns": ["benchmark_burden", "baseline_burden", "compute_burden", "reviewer_blockers"],
+  "decision_status": "pending"
+}

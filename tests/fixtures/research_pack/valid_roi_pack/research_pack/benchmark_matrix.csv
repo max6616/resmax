@@ -1,0 +1,4 @@
+paper_id,title,benchmark_role,dataset_source_role,has_dataset,benchmark_leverage,reviewer_dataset_objections,follow_up_targets
+p-scene-graph,Scene Graph Transformers,high,none,no,medium,,"extract benchmark datasets, metrics, and evaluation protocol for p-scene-graph"
+p-graph-diffusion,Graph Diffusion Planning,high,medium,yes,medium,,"extract benchmark datasets, metrics, and evaluation protocol for p-graph-diffusion"
+p-language-agent,Language Agent Tool Use,high,none,no,unknown,,"extract benchmark datasets, metrics, and evaluation protocol for p-language-agent"

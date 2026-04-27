@@ -1,0 +1,15 @@
+{
+  "paper_id": "p-graph-diffusion",
+  "forum_id": "forum-graph",
+  "venue": "ICLR",
+  "year": 2024,
+  "score_scale": "1-10",
+  "reviews": [
+    {
+      "rating": 7,
+      "confidence": 4,
+      "summary": "A compact fixture review for graph diffusion planning."
+    }
+  ],
+  "decision": "Accept"
+}

@@ -1,0 +1,30 @@
+{
+  "schema_version": "0.1.0",
+  "state_id": "research_spec:11111111",
+  "created_at": "2026-04-27T00:00:00Z",
+  "input_hash": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+  "parent_state_ids": [],
+  "producer": {"name": "phase0-fixture", "version": "0.1.0", "run_id": "fixture"},
+  "raw_intent": "low-cost retrieval traces for benchmark blind spots",
+  "problem_anchor": "benchmark blind spot discovery from retrieval traces",
+  "target_venue": "unknown",
+  "timeline": "unknown",
+  "compute_budget": "low",
+  "team_size": "unknown",
+  "non_goals": ["full experiment execution"],
+  "human_gates": ["after_macro_survey", "before_idea_generation"],
+  "budget_policy": {
+    "macro_max_candidates": 100,
+    "max_targeted_evidence_candidates": 30,
+    "evidence_expansion_requires_human_gate": true
+  },
+  "research_question": "Can retrieval traces expose benchmark blind spots for low-cost AI research planning?",
+  "objective": "Build a typed fixture for state validation.",
+  "scope": {
+    "included_topics": ["retrieval trace", "benchmark blind spot"],
+    "excluded_topics": ["full experiment execution"]
+  },
+  "roi_objectives": ["publication_upside", "implementation_reuse", "low_compute_cost"],
+  "unknowns": ["Whether benchmark coverage is sufficient for ranking"],
+  "decision_status": "pending"
+}

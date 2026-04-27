@@ -10,7 +10,8 @@ Designed to run on the GPU server and be invoked over SSH from the client
      HF_HUB_OFFLINE=1 python3 <RESMAX_SSH_REMOTE_SCRIPT> --query 'your query text'"
 
 Accepts the query as either `--query <text>` or as the first positional argument.
-Prints the embedding as a JSON list of floats to stdout; loading logs go to stderr.
+Prints the embedding as a JSON list of floats to stdout. With
+`--queries-json`, prints a JSON list of vectors. Loading logs go to stderr.
 """
 from __future__ import annotations
 
@@ -57,6 +58,7 @@ def _parse_args() -> argparse.Namespace:
         help="Query text (positional). Overridden by --query if both are given.",
     )
     p.add_argument("--query", default="", help="Query text (flag form). Preferred.")
+    p.add_argument("--queries-json", default="", help="JSON array of query strings for batch encoding.")
     p.add_argument("--model", default="Qwen/Qwen3-Embedding-8B")
     p.add_argument(
         "--device",
@@ -69,10 +71,10 @@ def _parse_args() -> argparse.Namespace:
 
 def main():
     args = _parse_args()
-    query = args.query or args.query_pos
-    if not query:
+    queries = _queries_from_args(args)
+    if not queries:
         print(
-            "Usage: encode_query.py --query <text> [--model MODEL] [--device DEVICE] [--dim N]",
+            "Usage: encode_query.py --query <text> | --queries-json '[...]' [--model MODEL] [--device DEVICE] [--dim N]",
             file=sys.stderr,
         )
         sys.exit(1)
@@ -105,7 +107,7 @@ def main():
     model.eval()
 
     encoded = tokenizer(
-        [query], padding=True, truncation=True,
+        queries, padding=True, truncation=True,
         max_length=8192, return_tensors="pt",
     ).to(torch.device(device))
 
@@ -115,16 +117,29 @@ def main():
         mask = encoded["attention_mask"].unsqueeze(-1).to(last_hidden.dtype)
         emb = (last_hidden * mask).sum(dim=1) / mask.sum(dim=1).clamp(min=1e-9)
         emb = torch.nn.functional.normalize(emb, p=2, dim=1)
-        vec = emb.cpu().float().numpy()[0]
+        vecs = emb.cpu().float().numpy()
 
-    if dim and len(vec) > dim:
-        vec = vec[:dim]
-        norm = (vec ** 2).sum() ** 0.5
-        if norm > 0:
-            vec = vec / norm
+    if dim and vecs.shape[1] > dim:
+        vecs = vecs[:, :dim]
+        norms = (vecs ** 2).sum(axis=1, keepdims=True) ** 0.5
+        norms[norms == 0] = 1.0
+        vecs = vecs / norms
 
-    # Print as JSON list to stdout — stderr has the loading logs
-    print(json.dumps(vec.tolist()))
+    payload = vecs[0].tolist() if len(queries) == 1 and not args.queries_json else vecs.tolist()
+    print(json.dumps(payload))
+
+
+def _queries_from_args(args: argparse.Namespace) -> list[str]:
+    if args.queries_json:
+        try:
+            payload = json.loads(args.queries_json)
+        except json.JSONDecodeError as exc:
+            raise SystemExit(f"--queries-json must be a JSON array: {exc}") from exc
+        if not isinstance(payload, list) or not all(isinstance(item, str) and item.strip() for item in payload):
+            raise SystemExit("--queries-json must be a JSON array of non-empty strings")
+        return [item.strip() for item in payload]
+    query = args.query or args.query_pos
+    return [query.strip()] if query.strip() else []
 
 
 if __name__ == "__main__":

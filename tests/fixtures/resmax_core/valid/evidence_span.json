@@ -1,0 +1,14 @@
+{
+  "schema_version": "0.1.0",
+  "state_id": "evidence_span:55555555",
+  "created_at": "2026-04-27T00:04:00Z",
+  "input_hash": "sha256:5555555555555555555555555555555555555555555555555555555555555555",
+  "parent_state_ids": ["retrieval_trace:33333333"],
+  "producer": {"name": "phase0-fixture", "version": "0.1.0", "run_id": "fixture"},
+  "paper_id": "paper-1",
+  "span_type": "abstract",
+  "text": "The method reports benchmark limitations in a low-compute setup.",
+  "source": {"kind": "accepted_index", "locator": "paper-1.abstract_raw", "status": "supported"},
+  "source_weight": "primary",
+  "evidence_status": "supported"
+}

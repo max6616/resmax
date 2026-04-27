@@ -1,0 +1,14 @@
+{
+  "records": [
+    {
+      "category": "no_cached_readable_source",
+      "hint": "Run Stage 5.5 source fetch or provide an approved cached source before stronger evidence extraction.",
+      "paper_dir": "",
+      "paper_id": "p-language-agent",
+      "source_text_status": "official_landing_only",
+      "source_text_url": "",
+      "title": "Language Agent Tool Use"
+    }
+  ],
+  "schema_version": "0.1.0"
+}

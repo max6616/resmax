@@ -1,0 +1,99 @@
+{
+  "artifact_count": 7,
+  "artifacts": [
+    {
+      "kind": "idea_cards",
+      "path": "idea_cards.jsonl",
+      "schema": "idea_card.schema.json",
+      "sha256": "sha256:dbb72213331df106d3f8f9f92e3cea803646f54ff7898439453ae3f57fc2f48b"
+    },
+    {
+      "kind": "idea_lineage",
+      "path": "idea_lineage.json",
+      "sha256": "sha256:06d4bea5bf86e1ada320334937f435956326e94d9c714ad3d21fe355fc6731c5"
+    },
+    {
+      "kind": "closest_work_checks",
+      "path": "closest_work_checks.jsonl",
+      "sha256": "sha256:a1c3465bf8663950721a45b4bb88c4189cbdaf3c2c794e87ec983a35dab25b5a"
+    },
+    {
+      "kind": "strongest_rejection_cases",
+      "path": "strongest_rejection_cases.md",
+      "sha256": "sha256:cecf088303b8fdf364a191c684262df4387294d8d4320539e56032fabc2437c0"
+    },
+    {
+      "kind": "cheapest_falsification",
+      "path": "cheapest_falsification.md",
+      "sha256": "sha256:71d87dfd16f042f4b6865f30d004f17cea76bb6b3caf8871cee39d0377e2437f"
+    },
+    {
+      "kind": "generation_trace",
+      "path": "generation_trace.jsonl",
+      "sha256": "sha256:8ebf1b16256041de6f44a3e047c02c86e3e22f41e97f2f1127eb61606d506f7f"
+    },
+    {
+      "kind": "idea_report",
+      "path": "idea_report.md",
+      "sha256": "sha256:63a532a6aca6b30428c438bf337c6a97848252b551a3c08a0cd28278450e6180"
+    }
+  ],
+  "candidate_counts": {
+    "duplicate_risk": 0,
+    "experiment_blueprint_ready": 3,
+    "insufficient_evidence": 0,
+    "phase6_ready": 4,
+    "total": 4
+  },
+  "created_at": "2026-04-27T00:00:00Z",
+  "decision_policy": {
+    "closest_work_required_for_phase6": true,
+    "direct_baseline_required_for_experiment_blueprint": true,
+    "final_promotion_allowed": false,
+    "topic_direct_generation_allowed": false
+  },
+  "input_hash": "sha256:0ce053c7e800305fc24b09b9b876d1e717a12bf8c24645cf0fb1aa7c2bc219a3",
+  "memory_status": "not_found",
+  "negative_memory_path": "/Users/zhangzhao/Code/resmax/resmax_memory/negative_memory.jsonl",
+  "parent_state_ids": [
+    "research_pack:c6e3372f4d992fff",
+    "gap_map:4a163370f4fedd2c"
+  ],
+  "portfolio_id": "idea_portfolio/phase6_valid_fixture",
+  "producer": {
+    "name": "resmax_idea",
+    "run_id": "phase6_fixture",
+    "version": "0.1.0"
+  },
+  "research_pack_path": "/Users/zhangzhao/Code/resmax/tests/fixtures/research_pack/valid_roi_pack/research_pack",
+  "schema_version": "0.1.0",
+  "source_index": {
+    "claim_ids": [
+      "claim:2ee123f58086aa52",
+      "claim:5ea16746d83744cb",
+      "claim:6da2f0c29c9cdb5f",
+      "claim:89bfef6fd4688576"
+    ],
+    "evidence_ids": [
+      "evidence_card:887d7bcaa96d5497",
+      "evidence_card:c39e0573d1607454",
+      "evidence_card:ce539c1f63b79c40",
+      "evidence_card:e388eab2ca704ebe"
+    ],
+    "gap_ids": [
+      "gap:b110438b12376010",
+      "gap:cec70bb389af71f4"
+    ],
+    "paper_ids": [
+      "p-graph-diffusion",
+      "p-language-agent",
+      "p-scene-graph"
+    ],
+    "research_pack_state_ids": [
+      "research_pack:c6e3372f4d992fff",
+      "gap_map:4a163370f4fedd2c",
+      "claim_graph:b59f3b7bf1a361f6"
+    ]
+  },
+  "state_id": "idea_portfolio:0ce053c7e800305f"
+}

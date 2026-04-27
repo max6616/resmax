@@ -1,0 +1,4 @@
+paper_id,title,implementation_role,has_code,has_pretrained_weights,implementation_reuse,engineering_risk,follow_up_targets
+p-scene-graph,Scene Graph Transformers,none,no,no,low,medium,"verify code, weights, dependencies, and reproduction path for p-scene-graph"
+p-graph-diffusion,Graph Diffusion Planning,high,yes,no,medium,high,"verify code, weights, dependencies, and reproduction path for p-graph-diffusion"
+p-language-agent,Language Agent Tool Use,high,yes,yes,medium,low,"verify code, weights, dependencies, and reproduction path for p-language-agent"

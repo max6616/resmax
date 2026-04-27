@@ -1,0 +1,293 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "resmax://schemas/experiment_blueprint",
+  "title": "ExperimentBlueprint",
+  "schema_version": "0.1.0",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "state_id",
+    "created_at",
+    "input_hash",
+    "parent_state_ids",
+    "producer",
+    "blueprint_id",
+    "source_paths",
+    "experiment_blocks",
+    "blocked_promoted_ideas",
+    "baseline_contract",
+    "metric_contract",
+    "risk_register",
+    "human_gate_package",
+    "evidence_status",
+    "decision_status"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {"type": "string", "enum": ["0.1.0"]},
+    "state_id": {"type": "string", "pattern": "^[a-z][a-z0-9_]*:[0-9a-f]{8,64}$"},
+    "created_at": {"type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}T"},
+    "input_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "parent_state_ids": {"type": "array", "items": {"type": "string"}},
+    "producer": {
+      "type": "object",
+      "required": ["name"],
+      "additionalProperties": false,
+      "properties": {
+        "name": {"type": "string", "minLength": 1},
+        "version": {"type": "string"},
+        "run_id": {"type": "string"}
+      }
+    },
+    "blueprint_id": {"type": "string", "pattern": "^blueprint:[0-9a-f]{8,64}$"},
+    "source_paths": {
+      "type": "object",
+      "required": ["research_pack", "ideas", "reviews"],
+      "additionalProperties": false,
+      "properties": {
+        "research_pack": {"type": "string", "minLength": 1},
+        "ideas": {"type": "string", "minLength": 1},
+        "reviews": {"type": "string", "minLength": 1}
+      }
+    },
+    "experiment_blocks": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/experiment_block"}
+    },
+    "blocked_promoted_ideas": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/blocked_promoted_idea"}
+    },
+    "baseline_contract": {"$ref": "#/$defs/baseline_category_sets"},
+    "metric_contract": {"$ref": "#/$defs/metric_contract"},
+    "risk_register": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/risk"}
+    },
+    "human_gate_package": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/human_gate"}
+    },
+    "evidence_status": {
+      "type": "string",
+      "enum": ["unknown", "not_found", "not_applicable", "insufficient_evidence", "supported", "contradicted", "mixed"]
+    },
+    "decision_status": {
+      "type": "string",
+      "enum": ["unknown", "pending", "promoted", "rejected", "needs_revision", "killed", "not_applicable"]
+    }
+  },
+  "$defs": {
+    "string_array": {"type": "array", "items": {"type": "string"}},
+    "baseline_category_sets": {
+      "type": "object",
+      "required": ["must_run", "nice_to_have", "appendix_only", "not_applicable", "unknown_needs_followup"],
+      "additionalProperties": false,
+      "properties": {
+        "must_run": {"$ref": "#/$defs/string_array"},
+        "nice_to_have": {"$ref": "#/$defs/string_array"},
+        "appendix_only": {"$ref": "#/$defs/string_array"},
+        "not_applicable": {"$ref": "#/$defs/string_array"},
+        "unknown_needs_followup": {"$ref": "#/$defs/string_array"}
+      }
+    },
+    "baseline_contract": {
+      "type": "object",
+      "required": [
+        "category",
+        "must_run",
+        "nice_to_have",
+        "appendix_only",
+        "not_applicable",
+        "unknown_needs_followup",
+        "baseline_burden",
+        "follow_up",
+        "rationale"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "category": {
+          "type": "string",
+          "enum": ["must_run", "nice_to_have", "appendix_only", "not_applicable", "unknown_needs_followup"]
+        },
+        "must_run": {"$ref": "#/$defs/string_array"},
+        "nice_to_have": {"$ref": "#/$defs/string_array"},
+        "appendix_only": {"$ref": "#/$defs/string_array"},
+        "not_applicable": {"$ref": "#/$defs/string_array"},
+        "unknown_needs_followup": {"$ref": "#/$defs/string_array"},
+        "baseline_burden": {"type": "string", "minLength": 1},
+        "follow_up": {"$ref": "#/$defs/string_array"},
+        "rationale": {"type": "string", "minLength": 1}
+      }
+    },
+    "dataset_contract": {
+      "type": "object",
+      "required": ["status", "name", "anchor_ids", "source", "follow_up"],
+      "additionalProperties": false,
+      "properties": {
+        "status": {"type": "string", "enum": ["available", "not_applicable", "unknown_needs_followup"]},
+        "name": {"type": "string", "minLength": 1},
+        "anchor_ids": {"$ref": "#/$defs/string_array"},
+        "source": {"type": "string", "minLength": 1},
+        "follow_up": {"$ref": "#/$defs/string_array"}
+      }
+    },
+    "metric_contract": {
+      "type": "object",
+      "required": ["primary_metric", "secondary_metrics", "sanity_metrics", "failure_metric"],
+      "additionalProperties": false,
+      "properties": {
+        "primary_metric": {"type": "string", "minLength": 1},
+        "secondary_metrics": {"$ref": "#/$defs/string_array"},
+        "sanity_metrics": {"$ref": "#/$defs/string_array"},
+        "failure_metric": {"type": "string", "minLength": 1},
+        "rationale": {"type": "string"}
+      }
+    },
+    "estimated_cost": {
+      "type": "object",
+      "required": ["estimate", "baseline_burden", "dataset_status", "budget_status"],
+      "additionalProperties": false,
+      "properties": {
+        "estimate": {"type": "string", "minLength": 1},
+        "baseline_burden": {"type": "string", "minLength": 1},
+        "dataset_status": {"type": "string", "minLength": 1},
+        "budget_status": {
+          "type": "string",
+          "enum": ["within_minimal_budget", "approval_required", "over_budget", "unknown_needs_followup"]
+        }
+      }
+    },
+    "blocker": {
+      "type": "object",
+      "required": ["blocker_type", "severity", "evidence_status", "evidence_ids", "explanation"],
+      "additionalProperties": false,
+      "properties": {
+        "blocker_type": {"type": "string", "minLength": 1},
+        "severity": {"type": "string", "minLength": 1},
+        "evidence_status": {"type": "string", "minLength": 1},
+        "evidence_ids": {"$ref": "#/$defs/string_array"},
+        "explanation": {"type": "string"}
+      }
+    },
+    "negative_memory_note": {
+      "type": "object",
+      "required": ["subject_id", "source_gap_ids", "evidence_card_ids", "reason"],
+      "additionalProperties": false,
+      "properties": {
+        "subject_id": {"type": "string", "minLength": 1},
+        "source_gap_ids": {"$ref": "#/$defs/string_array"},
+        "evidence_card_ids": {"$ref": "#/$defs/string_array"},
+        "reason": {"type": "string", "minLength": 1}
+      }
+    },
+    "experiment_block": {
+      "type": "object",
+      "required": [
+        "experiment_id",
+        "idea_id",
+        "source_idea_state_id",
+        "source_review_trace_ids",
+        "tested_claim",
+        "anti_claim",
+        "minimum_convincing_evidence",
+        "baseline",
+        "dataset",
+        "metric",
+        "ablation_or_sanity_check",
+        "estimated_cost",
+        "stop_condition",
+        "failure_interpretation",
+        "required_artifacts",
+        "human_gate_required",
+        "execution_status",
+        "unresolved_blockers",
+        "negative_memory_if_rejected"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "experiment_id": {"type": "string", "pattern": "^experiment:[0-9a-f]{8,64}$"},
+        "idea_id": {"type": "string", "minLength": 1},
+        "source_idea_state_id": {"type": "string"},
+        "source_review_trace_ids": {"$ref": "#/$defs/string_array"},
+        "tested_claim": {"type": "string", "minLength": 1},
+        "anti_claim": {"type": "string", "minLength": 1},
+        "minimum_convincing_evidence": {"type": "string", "minLength": 1},
+        "baseline": {"$ref": "#/$defs/baseline_contract"},
+        "dataset": {"$ref": "#/$defs/dataset_contract"},
+        "metric": {"$ref": "#/$defs/metric_contract"},
+        "ablation_or_sanity_check": {"type": "string", "minLength": 1},
+        "estimated_cost": {"$ref": "#/$defs/estimated_cost"},
+        "stop_condition": {"type": "string", "minLength": 1},
+        "failure_interpretation": {"type": "string", "minLength": 1},
+        "required_artifacts": {"$ref": "#/$defs/string_array"},
+        "human_gate_required": {"type": "boolean"},
+        "execution_status": {
+          "type": "string",
+          "enum": ["executable", "human_gate_required", "insufficient_evidence", "follow_up_required"]
+        },
+        "unresolved_blockers": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/blocker"}
+        },
+        "negative_memory_if_rejected": {"$ref": "#/$defs/negative_memory_note"}
+      }
+    },
+    "blocked_promoted_idea": {
+      "type": "object",
+      "required": ["idea_id", "reason_type", "details", "decision_reasons", "source_review_trace_ids", "follow_up_plan", "execution_status"],
+      "additionalProperties": false,
+      "properties": {
+        "idea_id": {"type": "string"},
+        "reason_type": {"type": "string", "minLength": 1},
+        "details": {"$ref": "#/$defs/string_array"},
+        "decision_reasons": {"$ref": "#/$defs/string_array"},
+        "source_review_trace_ids": {"$ref": "#/$defs/string_array"},
+        "follow_up_plan": {"type": "string", "minLength": 1},
+        "execution_status": {"type": "string", "enum": ["insufficient_evidence"]}
+      }
+    },
+    "risk": {
+      "type": "object",
+      "required": ["risk_id", "idea_id", "risk_type", "severity", "mitigation", "source"],
+      "additionalProperties": false,
+      "properties": {
+        "risk_id": {"type": "string", "pattern": "^risk:[0-9a-f]{8,64}$"},
+        "idea_id": {"type": "string"},
+        "risk_type": {"type": "string", "minLength": 1},
+        "severity": {"type": "string", "minLength": 1},
+        "mitigation": {"type": "string"},
+        "source": {"type": "string", "minLength": 1}
+      }
+    },
+    "human_gate": {
+      "type": "object",
+      "required": [
+        "idea_id",
+        "experiment_id",
+        "why_promoted",
+        "unresolved_blockers",
+        "cheapest_falsification",
+        "estimated_cost",
+        "what_approval_enables",
+        "negative_memory_if_rejected",
+        "human_gate_required"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "idea_id": {"type": "string", "minLength": 1},
+        "experiment_id": {"type": "string", "pattern": "^experiment:[0-9a-f]{8,64}$"},
+        "why_promoted": {"type": "string", "minLength": 1},
+        "unresolved_blockers": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/blocker"}
+        },
+        "cheapest_falsification": {"type": "string", "minLength": 1},
+        "estimated_cost": {"$ref": "#/$defs/estimated_cost"},
+        "what_approval_enables": {"type": "string", "minLength": 1},
+        "negative_memory_if_rejected": {"$ref": "#/$defs/negative_memory_note"},
+        "human_gate_required": {"type": "boolean"}
+      }
+    }
+  }
+}

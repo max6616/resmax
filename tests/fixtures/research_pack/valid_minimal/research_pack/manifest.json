@@ -1,0 +1,107 @@
+{
+  "artifact_count": 14,
+  "artifacts": [
+    {
+      "kind": "research_spec",
+      "path": "research_spec.json",
+      "schema": "research_spec.schema.json",
+      "sha256": "sha256:0264260c86edb0c4aafdcbf1e73a9fbc65e781b6815339f642a943fce69a3b04"
+    },
+    {
+      "kind": "source_policy",
+      "path": "source_policy.json",
+      "schema": "source_policy.schema.json",
+      "sha256": "sha256:3caece88f67b6fadddd0e9a2479f9b3a3f782696833b3814fd7c2dbf3bcaa775"
+    },
+    {
+      "kind": "query_family",
+      "path": "query_families.jsonl",
+      "schema": "query_family.schema.json",
+      "sha256": "sha256:f3335be06d8fca793645d039bab3030721b524ee96d0f5a46cdfe8c1f2b65146"
+    },
+    {
+      "kind": "retrieval_trace",
+      "path": "retrieval_trace.jsonl",
+      "schema": "retrieval_trace.schema.json",
+      "sha256": "sha256:70b02d2b881cb00781d5596c26ab2902f648ec4d71781eda928f163d07211eb1"
+    },
+    {
+      "kind": "selected_subdirection",
+      "path": "selected_subdirection.json",
+      "sha256": "sha256:bd23a422a2f3c9bee9b19da06b910cab11de4a5944ecdcf660eec332b7ad08d5"
+    },
+    {
+      "kind": "broad_candidates",
+      "path": "broad_candidates.csv",
+      "sha256": "sha256:d1f0473410f387d6a16190e4d6a94bfb8fcb75c162c704e2dfc67fef1f362802"
+    },
+    {
+      "kind": "evidence_span",
+      "path": "evidence_spans.jsonl",
+      "schema": "evidence_span.schema.json",
+      "sha256": "sha256:7d96df7a99d090bc58d8041d647549c2346cfad418ba0e81832b957e105d88df"
+    },
+    {
+      "kind": "evidence_card",
+      "path": "evidence_cards.jsonl",
+      "schema": "evidence_card.schema.json",
+      "sha256": "sha256:afb34e37e08d0587dc49efc9e8d8dc543dfd68177c48ced5e46014759adc3df3"
+    },
+    {
+      "kind": "claim_graph",
+      "path": "claim_graph.json",
+      "schema": "claim_graph.schema.json",
+      "sha256": "sha256:b5735c26da8c1d48dae868acebce9cc900393689d3b52088d7770f2bc5121716"
+    },
+    {
+      "kind": "gap_map",
+      "path": "gap_map.json",
+      "schema": "gap_map.schema.json",
+      "sha256": "sha256:aed54165637f62fa4733de91beca030f1ed816bf3bc2af1c8513319585436b06"
+    },
+    {
+      "kind": "missing_source_report",
+      "path": "missing_source_report.json",
+      "sha256": "sha256:b5fa3675cc317822dd6057a5f8c4d3a15540ea138d8dac01d7014793876f5ab1"
+    },
+    {
+      "kind": "missing_pdf_report",
+      "path": "missing_pdf_report.json",
+      "sha256": "sha256:f655eff60da128359555dbc752623f0b795ee403aa96d394acb28abbf02e0905"
+    },
+    {
+      "kind": "coverage_report",
+      "path": "coverage_report.md",
+      "sha256": "sha256:e4379e60f16770e461301cf9462a7e70c42e1c3c33579984070803ea570db426"
+    },
+    {
+      "kind": "field_map",
+      "path": "field_map.md",
+      "sha256": "sha256:4dbb0a01ea10536d9ec4300bb83960ff3e1285d03f316effcec831a64d7aff16"
+    }
+  ],
+  "created_at": "2026-04-27T03:52:57Z",
+  "decision_status": "pending",
+  "evidence_coverage": {
+    "evidence_card_count": 4,
+    "evidence_span_count": 4,
+    "missing_pdf_count": 2,
+    "missing_source_count": 1,
+    "papers_with_evidence": 2,
+    "selected_candidate_count": 3
+  },
+  "input_hash": "sha256:d627689d05f07b77eea5e0472cade45bd1c57f97a95552a4013a3910c0c5b62e",
+  "pack_id": "research_pack/sdir_graph_reasoning",
+  "parent_state_ids": [
+    "research_spec:11111111",
+    "gap_map:4a163370f4fedd2c"
+  ],
+  "producer": {
+    "name": "resmax_survey_v2.phase3_pack",
+    "run_id": "phase3",
+    "version": "0.1.0"
+  },
+  "research_spec_id": "research_spec:11111111",
+  "schema_version": "0.1.0",
+  "state_id": "research_pack:d627689d05f07b77"
+}

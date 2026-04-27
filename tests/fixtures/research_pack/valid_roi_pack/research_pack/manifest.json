@@ -1,0 +1,172 @@
+{
+  "artifact_count": 23,
+  "artifacts": [
+    {
+      "kind": "research_spec",
+      "path": "research_spec.json",
+      "schema": "research_spec.schema.json",
+      "sha256": "sha256:0264260c86edb0c4aafdcbf1e73a9fbc65e781b6815339f642a943fce69a3b04"
+    },
+    {
+      "kind": "source_policy",
+      "path": "source_policy.json",
+      "schema": "source_policy.schema.json",
+      "sha256": "sha256:3caece88f67b6fadddd0e9a2479f9b3a3f782696833b3814fd7c2dbf3bcaa775"
+    },
+    {
+      "kind": "query_family",
+      "path": "query_families.jsonl",
+      "schema": "query_family.schema.json",
+      "sha256": "sha256:f3335be06d8fca793645d039bab3030721b524ee96d0f5a46cdfe8c1f2b65146"
+    },
+    {
+      "kind": "retrieval_trace",
+      "path": "retrieval_trace.jsonl",
+      "schema": "retrieval_trace.schema.json",
+      "sha256": "sha256:70b02d2b881cb00781d5596c26ab2902f648ec4d71781eda928f163d07211eb1"
+    },
+    {
+      "kind": "selected_subdirection",
+      "path": "selected_subdirection.json",
+      "sha256": "sha256:bd23a422a2f3c9bee9b19da06b910cab11de4a5944ecdcf660eec332b7ad08d5"
+    },
+    {
+      "kind": "broad_candidates",
+      "path": "broad_candidates.csv",
+      "sha256": "sha256:d1f0473410f387d6a16190e4d6a94bfb8fcb75c162c704e2dfc67fef1f362802"
+    },
+    {
+      "kind": "evidence_span",
+      "path": "evidence_spans.jsonl",
+      "schema": "evidence_span.schema.json",
+      "sha256": "sha256:7d96df7a99d090bc58d8041d647549c2346cfad418ba0e81832b957e105d88df"
+    },
+    {
+      "kind": "evidence_card",
+      "path": "evidence_cards.jsonl",
+      "schema": "evidence_card.schema.json",
+      "sha256": "sha256:afb34e37e08d0587dc49efc9e8d8dc543dfd68177c48ced5e46014759adc3df3"
+    },
+    {
+      "kind": "claim_graph",
+      "path": "claim_graph.json",
+      "schema": "claim_graph.schema.json",
+      "sha256": "sha256:b5735c26da8c1d48dae868acebce9cc900393689d3b52088d7770f2bc5121716"
+    },
+    {
+      "kind": "gap_map",
+      "path": "gap_map.json",
+      "schema": "gap_map.schema.json",
+      "sha256": "sha256:aed54165637f62fa4733de91beca030f1ed816bf3bc2af1c8513319585436b06"
+    },
+    {
+      "kind": "missing_source_report",
+      "path": "missing_source_report.json",
+      "sha256": "sha256:b5fa3675cc317822dd6057a5f8c4d3a15540ea138d8dac01d7014793876f5ab1"
+    },
+    {
+      "kind": "missing_pdf_report",
+      "path": "missing_pdf_report.json",
+      "sha256": "sha256:f655eff60da128359555dbc752623f0b795ee403aa96d394acb28abbf02e0905"
+    },
+    {
+      "kind": "coverage_report",
+      "path": "coverage_report.md",
+      "sha256": "sha256:e4379e60f16770e461301cf9462a7e70c42e1c3c33579984070803ea570db426"
+    },
+    {
+      "kind": "field_map",
+      "path": "field_map.md",
+      "sha256": "sha256:4dbb0a01ea10536d9ec4300bb83960ff3e1285d03f316effcec831a64d7aff16"
+    },
+    {
+      "kind": "reviewer_pressure_notes",
+      "path": "reviewer_pressure_notes.jsonl",
+      "sha256": "sha256:861a5cb257225879c85a676e1c50b24c76aba7c5349dcee39eaad3a1fcf28aaa"
+    },
+    {
+      "kind": "paper_roles",
+      "path": "paper_roles.json",
+      "sha256": "sha256:5dd1f51f43930276076a02b409ada134e636d9c8d3064e86c148dfb004ec1fe9"
+    },
+    {
+      "kind": "baseline_matrix",
+      "path": "baseline_matrix.csv",
+      "sha256": "sha256:4c2f8ab62a11506084a2fe920e6fef636c0535c237b81c30a9fa7944ba703c6c"
+    },
+    {
+      "kind": "benchmark_matrix",
+      "path": "benchmark_matrix.csv",
+      "sha256": "sha256:cd29c5c417ca760c35f156c6d3c107586998eb13969d631796c3fabe053cd1a7"
+    },
+    {
+      "kind": "implementation_matrix",
+      "path": "implementation_matrix.csv",
+      "sha256": "sha256:1a8896e60863db0fb41465c0d86e02ac9723c36edcd319128810e866d349929a"
+    },
+    {
+      "kind": "gap_roi_table",
+      "path": "gap_roi_table.csv",
+      "sha256": "sha256:1f275581301a36bd99d9b7b7d8e19a27594584398e15025268110fce99b866e9"
+    },
+    {
+      "kind": "roi_lens",
+      "path": "roi_lens.json",
+      "sha256": "sha256:9bcc872518a501caad91ce492a678a32af7e08c5148172dc7e70720d3a19ebb1"
+    },
+    {
+      "kind": "risk_register",
+      "path": "risk_register.md",
+      "sha256": "sha256:b9e40055009ddc08b4b3317496154c0e5dae8eae96300feb55b0bb49f448a965"
+    },
+    {
+      "kind": "idea_seed_constraints",
+      "path": "idea_seed_constraints.md",
+      "sha256": "sha256:71b05323c35764b68ea18418a579547a53a08483552a2520d2eab65114c73acb"
+    }
+  ],
+  "created_at": "2026-04-27T03:52:57Z",
+  "decision_status": "pending",
+  "evidence_coverage": {
+    "evidence_card_count": 4,
+    "evidence_span_count": 4,
+    "missing_pdf_count": 2,
+    "missing_source_count": 1,
+    "papers_with_evidence": 2,
+    "selected_candidate_count": 3
+  },
+  "input_hash": "sha256:c6e3372f4d992fff983d18c6ae8b0baf1714ce1502872e0484e19a6292b9d67c",
+  "mechanical_checks": {
+    "idea_seed_constraints_are_constraints_not_ideas": true,
+    "paper_role_taxonomy_complete": true,
+    "reviewer_pressure_marks_inferred_items": true,
+    "reviewer_pressure_uses_real_review_cache": true,
+    "risk_register_references_structured_artifacts": true,
+    "single_black_box_roi_score_absent": true,
+    "unknowns_emit_follow_up_targets": true
+  },
+  "pack_id": "research_pack/sdir_graph_reasoning",
+  "parent_state_ids": [
+    "research_spec:11111111",
+    "gap_map:4a163370f4fedd2c"
+  ],
+  "producer": {
+    "name": "resmax_survey_v2.phase4_roi",
+    "run_id": "phase4",
+    "version": "0.1.0"
+  },
+  "research_spec_id": "research_spec:11111111",
+  "schema_version": "0.1.0",
+  "source_counts": {
+    "assigned_role_count": 14,
+    "gap_roi_rows": 2,
+    "inferred_review_notes": 0,
+    "missing_review_follow_up_targets": 2,
+    "paper_role_assignments": 3,
+    "real_review_notes": 4,
+    "reviewer_blockers": 4,
+    "reviewer_pressure_notes": 4,
+    "unknown_follow_up_targets": 9
+  },
+  "state_id": "research_pack:c6e3372f4d992fff"
+}

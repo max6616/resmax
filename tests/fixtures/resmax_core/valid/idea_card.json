@@ -1,0 +1,73 @@
+{
+  "schema_version": "0.1.0",
+  "state_id": "idea_card:aaaaaaaa",
+  "created_at": "2026-04-27T00:09:00Z",
+  "input_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "parent_state_ids": ["gap_map:88888888"],
+  "producer": {"name": "phase0-fixture", "version": "0.1.0", "run_id": "fixture"},
+  "idea_id": "idea-1",
+  "title": "Audit benchmark blind spots before proposing a new method.",
+  "source_gap_ids": ["gap-1"],
+  "source_claim_ids": ["claim-1"],
+  "evidence_ids": ["evidence_card:66666666"],
+  "closest_work_ids": ["paper-1"],
+  "generation_sources": ["gap_driven", "benchmark_blindspot_driven"],
+  "core_delta": "The fixture records a closest-work delta that must be reviewed later.",
+  "primary_claim": "A targeted benchmark audit can reveal a lower-cost algorithmic contribution.",
+  "mechanism": "Use benchmark blind spots as constraints before method invention.",
+  "why_now": "Phase 4 ROI lens exposes benchmark leverage and story clarity.",
+  "direct_baselines": ["paper-1"],
+  "method_donors": [],
+  "benchmark_opportunities": ["paper-1"],
+  "estimated_compute": "low_existing_code_path",
+  "estimated_timeline": "short_minimal_falsification_first",
+  "expected_failure_modes": ["Closest work already covers the proposed delta."],
+  "reviewer_attack_points": [
+    {
+      "note_id": "reviewer_pressure_note:11111111",
+      "objection_type": "baseline",
+      "severity": "medium",
+      "summary": "Baseline coverage may be insufficient."
+    }
+  ],
+  "strongest_rejection_case": "Closest work already covers the proposed delta.",
+  "cheapest_falsification": {
+    "claim_to_falsify": "A targeted benchmark audit can reveal a lower-cost algorithmic contribution.",
+    "minimal_test": "Run one benchmark ablation against the closest direct baseline.",
+    "falsifies_if": "No measurable delta remains after controlling closest work.",
+    "required_baseline_ids": ["paper-1"],
+    "expected_cost": "low_existing_code_path"
+  },
+  "lineage": {
+    "parent_gap_ids": ["gap-1"],
+    "parent_idea_ids": [],
+    "mutation_operator": "benchmark_blindspot_compile",
+    "mutation_reason": "Gap exposes benchmark blind spot.",
+    "status": "proceed"
+  },
+  "roi": {
+    "positive_signals": {
+      "benchmark_leverage": {"value": "medium", "refs": ["paper-1"], "inferred": false}
+    },
+    "difficulty_signals": {
+      "baseline_burden": {"value": "medium", "refs": ["paper-1"], "inferred": false}
+    },
+    "unknowns": [
+      {
+        "field": "novelty_headroom",
+        "follow_up_retrieval_target": "Check closest work delta.",
+        "reason": "Fixture unknown.",
+        "confidence_impact": "lowers_confidence"
+      }
+    ],
+    "reviewer_blockers": [],
+    "confidence": "medium"
+  },
+  "duplicate_memory_matches": [],
+  "readiness": {
+    "phase6_review_ready": true,
+    "experiment_blueprint_ready": true,
+    "not_ready_reasons": []
+  },
+  "status": "phase6_ready"
+}

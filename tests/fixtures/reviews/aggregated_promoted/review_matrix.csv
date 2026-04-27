@@ -1,0 +1,5 @@
+idea_id,final_status,aggregation_status,review_trace_count,missing_review_roles,fatal_blocker_count,major_blocker_count,reviewer_statuses,tournament_rank
+idea:d3bf5354de3f1f42,promoted,PROMOTE,5,,0,0,promote,1
+idea:5e301f25743423ef,killed,BLOCKED,5,,1,0,kill;promote,4
+idea:bdf48a9c899cef36,revise,REVISE,5,,0,0,promote,2
+idea:638e03732df2e58b,human_gate,NEEDS_HUMAN_GATE,5,,0,1,promote;revise,3

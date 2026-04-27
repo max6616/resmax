@@ -1,0 +1,2 @@
+subdirection_id,label,paper_count,positive_signals,difficulty_signals,benchmark_burden,compute_burden,baseline_burden,reviewer_risk,evidence_status,rough_roi_confidence,roi_unknowns,representative_papers
+sdir_graph_reasoning,Graph reasoning and planning,3,benchmark_mentions|implementation_reuse|recent_top_venue,baseline_burden_unknown|compute_burden_unknown|implementation_reference_unknown,weak,unknown,unknown,unknown,weak,low,baseline_burden|compute_burden|reviewer_risk,p-scene-graph|p-graph-diffusion

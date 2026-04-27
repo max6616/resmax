@@ -6,7 +6,7 @@
 
 > Autonomous literature infrastructure for AI research agents.
 >
-> Encapsulates the repeatable parts of the research literature workflow as reusable Cursor Skills so agents can build paper databases, semantic indexes, and direction-level surveys with consistent quality.
+> Encapsulates the repeatable parts of the research literature workflow as reusable Cursor Skills so agents can build paper databases, semantic indexes, direction-level surveys, evidence-grounded idea portfolios, and blocker-first review tournaments with consistent quality.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
 ![Python](https://img.shields.io/badge/python-3.10%2B-blue.svg)
@@ -24,7 +24,7 @@ embedded with Markdown image syntax. Typical uses: license, Python version, CI s
 
 ## Highlights
 
-- **Three skills, filesystem-decoupled** — `resmax-database`, `resmax-embedding`, and `resmax-survey` exchange data via CSV and `.npz` caches only; no runtime coupling, so each stage can be swapped independently.
+- **Five workflow skills, filesystem-decoupled** — `resmax-database`, `resmax-embedding`, `resmax-survey`, `resmax-idea`, and `resmax-review` exchange data through stable filesystem artifacts only; no runtime coupling, so each stage can be swapped independently.
 - **Top AI venues** — Multi-source accepted-list ingestion (OpenReview / OpenAlex / Semantic Scholar, etc.) with automatic enrichment: abstracts, reviews, open-source signals, acceptance tier.
 - **Dual retrieval + LLM scoring** — Keyword search combined with Qwen3-Embedding-8B semantic search; merged and deduplicated, then per-paper scoring by a subagent and a final review pass by the main agent.
 - **Incremental-friendly and verifiable** — Stable artifacts per stage; `validate_database.py` is the single source of truth for database health.
@@ -54,7 +54,19 @@ embedded with Markdown image syntax. Typical uses: license, Python version, CI s
   ┌─────────────────────┐         literature_research/<topic>/
   │   resmax-survey     │───────▶ ├── research_index.csv
   │   retrieve + rank   │         ├── literature_list.md
-  └─────────────────────┘         └── filter_log.md
+  └─────────────────────┘         ├── research_pack/
+              │                   └── filter_log.md
+              ▼
+  ┌─────────────────────┐         literature_research/<topic>/ideas/
+  │    resmax-idea      │───────▶ ├── idea_cards.jsonl
+  │  compile portfolio  │         └── idea_report.md
+  └─────────────────────┘
+              │
+              ▼
+  ┌─────────────────────┐         literature_research/<topic>/reviews/
+  │    resmax-review    │───────▶ ├── raw/<reviewer>/<idea_id>.json
+  │  blocker tournament │         └── promoted/killed/revise/human_gate JSONL
+  └─────────────────────┘
 ```
 
 Each layer only reads the previous layer's artifacts, so stages can be rerun, swapped out, or replayed with a different embedding model without disturbing the rest of the pipeline.
@@ -69,7 +81,9 @@ resmax/
 │   ├── _shared/                 #   cross-skill utilities (secrets_loader, ...)
 │   ├── resmax-database/         #   Skill 1: base literature index
 │   ├── resmax-embedding/        #   Skill 2: embedding cache on GPU
-│   └── resmax-survey/           #   Skill 3: topic-level retrieval + ranking
+│   ├── resmax-survey/           #   Skill 3: topic-level retrieval + ResearchPack
+│   ├── resmax-idea/             #   Skill 4: ResearchPack -> idea portfolio
+│   └── resmax-review/           #   Skill 5: raw reviews -> blocker tournament
 ├── .claude/skills -> ../.agents/skills
 ├── .codex/skills  -> ../.agents/skills
 ├── .cursor/skills -> ../.agents/skills
@@ -152,6 +166,8 @@ After initialization, invoke the workflow skills through your agent:
 | Build or update the base literature index | "update accepted list" / "build literature base" / "full rebuild" | `paper_database/accepted_index.csv` |
 | Build or refresh the embedding cache | "build embedding" / "refresh embedding cache" | `paper_database/embedding_cache/*.npz` |
 | Run a topic survey | "literature survey \<topic\>" / "retrieve papers for \<topic\>" | `literature_research/<topic>/` |
+| Compile an idea portfolio | "generate ideas from this ResearchPack" / "run resmax-idea" | `literature_research/<topic>/ideas/` |
+| Review an idea portfolio | "review this idea portfolio" / "run resmax-review" | `literature_research/<topic>/reviews/` |
 
 When a required value is missing, the agent must stop and ask instead of inventing a value.
 
@@ -164,7 +180,9 @@ When a required value is missing, the agent must stop and ask instead of inventi
 | 0 | `resmax-init` | First-time setup: local env files, required/optional fields, database artifact choices | `.secrets/*.env` + `.localconfig/*.env` + setup report | [link](./.agents/skills/resmax-init/SKILL.md) |
 | 1 | `resmax-database` | Multi-source accepted-list fetch + batch enrichment (abstracts / reviews / code / acceptance type) | `accepted_index.csv` + `reviews/` | [link](./.agents/skills/resmax-database/SKILL.md) |
 | 2 | `resmax-embedding` | Encode title+abstract with Qwen3-Embedding-8B on a GPU server; emit `.npz` cache | `embedding_cache/qwen3_8b.npz` | [link](./.agents/skills/resmax-embedding/SKILL.md) |
-| 3 | `resmax-survey`   | Dual retrieval (keyword + embedding) → merge → per-paper scoring → main-agent review → ranked list | `literature_research/<topic>/literature_list.md` | [link](./.agents/skills/resmax-survey/SKILL.md) |
+| 3 | `resmax-survey`   | Dual retrieval + evidence-first ResearchPack and ROI-aware gap lens | `literature_research/<topic>/research_pack/` | [link](./.agents/skills/resmax-survey/SKILL.md) |
+| 4 | `resmax-idea` | Compile validated ResearchPack into IdeaCards, lineage, closest-work checks, and falsification notes | `literature_research/<topic>/ideas/` | [link](./.agents/skills/resmax-idea/SKILL.md) |
+| 5 | `resmax-review` | Preserve heterogeneous raw reviews, aggregate blockers, and run a pairwise tournament | `literature_research/<topic>/reviews/` | [link](./.agents/skills/resmax-review/SKILL.md) |
 
 Each skill's internal stages, parameters, error handling and behavioural constraints are documented as an "API manual" inside its own `SKILL.md`, which is the authoritative reference for the agent.
 
@@ -194,6 +212,9 @@ Loader implementation, hard-vs-soft requirements, and the agent's standard respo
 | `literature_research/<topic>/research_index.csv` | `resmax-survey` | Topic-level subset of hits |
 | `literature_research/<topic>/literature_list.md` | `resmax-survey` | Final ranked list (with scores and rationales) |
 | `literature_research/<topic>/filter_log.md` | `resmax-survey` | Filter / scoring pipeline log |
+| `literature_research/<topic>/research_pack/` | `resmax-survey` | Evidence, ClaimGraph, GapMap, reviewer pressure, paper roles, and ROI lens |
+| `literature_research/<topic>/ideas/` | `resmax-idea` | IdeaCards, lineage, closest-work checks, rejection cases, and cheapest falsification notes |
+| `literature_research/<topic>/reviews/` | `resmax-review` | Evidence packages, raw ReviewTrace JSON, blocker aggregation, tournament trace, and promoted/killed/revise/human_gate JSONL |
 | `cache/huggingface/resmax/` | `scripts/resmax_data.py` | Internal Hugging Face transfer mirror for `accepted_index.csv`, `manifest.json`, `qwen3_8b.npz`, and packaged `reviews/` |
 
 All of the above directories are gitignored — they are reproducible artifacts.

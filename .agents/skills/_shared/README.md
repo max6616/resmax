@@ -8,6 +8,27 @@ skill-specific should live in that skill's own `scripts/` directory.
 | File | Purpose |
 | --- | --- |
 | `secrets_loader.py` | Unified loader for `.secrets/` and `.localconfig/`. Automatically sources `.env` files, exposes `require_secret()` and `get_secret()` with a standardised missing-value error that tells the agent which file to populate. (Named with the `_loader` suffix to avoid shadowing Python's stdlib `secrets` module.) |
+| `data_contracts.py` | Small normalization helpers for database/source-text fields used by existing skills. |
+| `resmax_core/` | Shared state contracts for research-agent artifacts: JSON schemas, state id/hash helpers, trace helper, and CLI validators. Keep skill-specific retrieval, scoring, or survey logic outside this directory. |
+
+## `resmax_core/` boundary
+
+`resmax_core/` is a contract layer, not a runtime platform. It may contain:
+
+- schema files under `schemas/`;
+- deterministic state id and input hash helpers;
+- append-only JSONL trace helpers;
+- validators that return non-zero exit codes on invalid JSON/JSONL artifacts.
+
+It must not contain `resmax-survey` pipeline logic, production data access, long-running services, MCP servers, or idea generation code.
+
+Example validator call:
+
+```bash
+python3 .agents/skills/_shared/resmax_core/validators/validate_state.py \
+  --schema .agents/skills/_shared/resmax_core/schemas/evidence_card.schema.json \
+  --input tests/fixtures/resmax_core/valid/evidence_card.json
+```
 
 ## Usage from a script
 

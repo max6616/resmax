@@ -1,0 +1,21 @@
+{
+  "records": [
+    {
+      "category": "no_cached_pdf_text_layer",
+      "hint": "PDF text is absent from cache; existing TeX or MinerU cache may still support weak evidence if present.",
+      "paper_dir": "/Users/zhangzhao/Code/resmax/tests/fixtures/resmax_survey_v2/macro_smoke/survey_v2/paper_sources/p-scene-graph",
+      "paper_id": "p-scene-graph",
+      "source_text_status": "pdf_available",
+      "title": "Scene Graph Transformers"
+    },
+    {
+      "category": "no_cached_pdf_text_layer",
+      "hint": "PDF text is absent from cache; existing TeX or MinerU cache may still support weak evidence if present.",
+      "paper_dir": "",
+      "paper_id": "p-language-agent",
+      "source_text_status": "official_landing_only",
+      "title": "Language Agent Tool Use"
+    }
+  ],
+  "schema_version": "0.1.0"
+}

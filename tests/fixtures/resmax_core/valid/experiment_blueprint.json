@@ -1,0 +1,109 @@
+{
+  "schema_version": "0.1.0",
+  "state_id": "experiment_blueprint:cccccccc",
+  "created_at": "2026-04-27T00:11:00Z",
+  "input_hash": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+  "parent_state_ids": ["idea_card:aaaaaaaa", "review_manifest:bbbbbbbb"],
+  "producer": {"name": "phase0-fixture", "version": "0.1.0", "run_id": "fixture"},
+  "blueprint_id": "blueprint:cccccccc",
+  "source_paths": {
+    "research_pack": "tests/fixtures/research_pack/valid_roi_pack/research_pack",
+    "ideas": "tests/fixtures/ideas/valid_portfolio",
+    "reviews": "tests/fixtures/reviews/aggregated_promoted"
+  },
+  "experiment_blocks": [
+    {
+      "experiment_id": "experiment:eeeeeeee",
+      "idea_id": "idea:aaaaaaaa",
+      "source_idea_state_id": "idea_card:aaaaaaaa",
+      "source_review_trace_ids": ["review_trace:bbbbbbbb"],
+      "tested_claim": "A resource-arbitrage idea can produce a measurable delta under a controlled baseline.",
+      "anti_claim": "Closest work already explains the delta after controlling baseline and cost.",
+      "minimum_convincing_evidence": "One controlled comparison changes reviewer belief about the primary claim.",
+      "baseline": {
+        "category": "must_run",
+        "must_run": ["p-direct"],
+        "nice_to_have": [],
+        "appendix_only": [],
+        "not_applicable": [],
+        "unknown_needs_followup": [],
+        "baseline_burden": "low",
+        "follow_up": [],
+        "rationale": "The direct baseline is enough for minimal falsification."
+      },
+      "dataset": {
+        "status": "available",
+        "name": "fixture benchmark",
+        "anchor_ids": ["p-direct"],
+        "source": "benchmark_matrix.csv",
+        "follow_up": []
+      },
+      "metric": {
+        "primary_metric": "claim_delta_vs_must_run_baseline",
+        "secondary_metrics": ["compute_or_runtime_cost"],
+        "sanity_metrics": ["baseline_only_variant"],
+        "failure_metric": "no_measurable_delta_after_controlling_baseline_and_cost",
+        "rationale": "The metric contract is claim-driven."
+      },
+      "ablation_or_sanity_check": "Run a baseline-only sanity check.",
+      "estimated_cost": {
+        "estimate": "low_existing_code_path",
+        "baseline_burden": "low",
+        "dataset_status": "available",
+        "budget_status": "within_minimal_budget"
+      },
+      "stop_condition": "Stop if no measurable delta remains after controlling the direct baseline.",
+      "failure_interpretation": "Failure supports the anti-claim.",
+      "required_artifacts": ["raw_config_or_protocol", "baseline_outputs", "metric_table", "failure_notes"],
+      "human_gate_required": false,
+      "execution_status": "executable",
+      "unresolved_blockers": [],
+      "negative_memory_if_rejected": {
+        "subject_id": "idea:aaaaaaaa",
+        "source_gap_ids": ["gap:aaaaaaaa"],
+        "evidence_card_ids": ["evidence_card:66666666"],
+        "reason": "Human rejected minimal falsification despite Phase 6 promotion."
+      }
+    }
+  ],
+  "blocked_promoted_ideas": [],
+  "baseline_contract": {
+    "must_run": ["p-direct"],
+    "nice_to_have": [],
+    "appendix_only": [],
+    "not_applicable": [],
+    "unknown_needs_followup": []
+  },
+  "metric_contract": {
+    "primary_metric": "claim_delta_vs_must_run_baseline",
+    "secondary_metrics": ["compute_or_runtime_cost"],
+    "sanity_metrics": ["baseline_only_variant"],
+    "failure_metric": "no_measurable_delta_after_controlling_baseline_and_cost"
+  },
+  "risk_register": [],
+  "human_gate_package": [
+    {
+      "idea_id": "idea:aaaaaaaa",
+      "experiment_id": "experiment:eeeeeeee",
+      "why_promoted": "Phase 6 promoted this idea after blocker-first raw review aggregation.",
+      "unresolved_blockers": [],
+      "cheapest_falsification": "One controlled comparison changes reviewer belief about the primary claim.",
+      "estimated_cost": {
+        "estimate": "low_existing_code_path",
+        "baseline_burden": "low",
+        "dataset_status": "available",
+        "budget_status": "within_minimal_budget"
+      },
+      "what_approval_enables": "Run only the minimal falsification protocol.",
+      "negative_memory_if_rejected": {
+        "subject_id": "idea:aaaaaaaa",
+        "source_gap_ids": ["gap:aaaaaaaa"],
+        "evidence_card_ids": ["evidence_card:66666666"],
+        "reason": "Human rejected minimal falsification despite Phase 6 promotion."
+      },
+      "human_gate_required": false
+    }
+  ],
+  "evidence_status": "supported",
+  "decision_status": "promoted"
+}

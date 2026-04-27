@@ -51,8 +51,12 @@ try:
     import pymupdf  # type: ignore
     HAS_PYMUPDF = True
 except ImportError:  # pragma: no cover
-    pymupdf = None  # type: ignore[assignment]
-    HAS_PYMUPDF = False
+    try:
+        import fitz as pymupdf  # type: ignore
+        HAS_PYMUPDF = True
+    except ImportError:
+        pymupdf = None  # type: ignore[assignment]
+        HAS_PYMUPDF = False
 
 try:
     import requests  # type: ignore
@@ -294,6 +298,7 @@ def fetch_arxiv_tex(
     *,
     keep_comments: bool = False,
     remove_appendix: bool = False,
+    cache_dir: Optional[Path] = None,
 ) -> Optional[str]:
     """Return flattened LaTeX source for an arXiv paper (or None)."""
     if not HAS_ARXIV_TO_PROMPT or not arxiv_id or not arxiv_id.strip():
@@ -302,6 +307,8 @@ def fetch_arxiv_tex(
         text = process_latex_source(
             arxiv_id.strip(),
             keep_comments=keep_comments,
+            cache_dir=str(cache_dir) if cache_dir else None,
+            use_cache=True,
             remove_appendix_section=remove_appendix,
         )
     except Exception:
@@ -402,6 +409,7 @@ def fetch_and_cache_source(
     """
     paper_dir = cache_dir / _safe_id(paper_id)
     paper_dir.mkdir(parents=True, exist_ok=True)
+    arxiv_to_prompt_cache = cache_dir / ".arxiv_to_prompt_cache"
 
     sources_present: list[str] = []
     source_files: dict[str, str] = {}
@@ -416,7 +424,7 @@ def fetch_and_cache_source(
         if not overwrite and tex_path.exists() and tex_path.stat().st_size > 0:
             tex_text = tex_path.read_text(encoding="utf-8", errors="ignore")
         else:
-            tex_text = fetch_arxiv_tex(arxiv_id)
+            tex_text = fetch_arxiv_tex(arxiv_id, cache_dir=arxiv_to_prompt_cache)
             if tex_text:
                 tex_path.write_text(tex_text, encoding="utf-8")
         if tex_text:

@@ -1,0 +1,18 @@
+{
+  "schema_version": "0.1.0",
+  "state_id": "claim_graph:eeeeeeee",
+  "created_at": "2026-04-27T00:15:00Z",
+  "input_hash": "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+  "parent_state_ids": [],
+  "producer": {"name": "phase0-fixture", "version": "0.1.0", "run_id": "fixture"},
+  "claims": [
+    {
+      "claim_id": "claim-bad",
+      "text": "This strong claim has no evidence reference and is not marked insufficient.",
+      "strength": "strong",
+      "evidence_status": "unknown",
+      "evidence_card_ids": []
+    }
+  ],
+  "edges": []
+}

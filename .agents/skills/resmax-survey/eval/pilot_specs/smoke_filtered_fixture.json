@@ -1,0 +1,19 @@
+{
+  "schema_version": "0.1.0",
+  "name": "smoke_filtered_fixture",
+  "corpus": {
+    "accepted_csv": "tests/fixtures/corpus_api/accepted_index.csv",
+    "reviews_dir": "tests/fixtures/corpus_api/reviews",
+    "embedding_cache": "tests/fixtures/corpus_api/missing_embedding_cache.npz"
+  },
+  "baselines": [
+    {
+      "name": "keyword_graph_iclr2024",
+      "mode": "keyword",
+      "query": "graph",
+      "filters": {"conf_year": ["ICLR_2024"]},
+      "top_k": 2,
+      "expected_paper_ids": ["p-graph-diffusion"]
+    }
+  ]
+}

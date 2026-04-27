@@ -1,0 +1,8 @@
+{
+  "schema_version": "0.1.0",
+  "created_at": "2026-04-27T00:00:04Z",
+  "research_spec_id": "research_spec:11111111",
+  "source_policy_id": "source_policy:22222222",
+  "candidate_count": 3,
+  "trace_ids": ["retrieval_trace:44444444"]
+}

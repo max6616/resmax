@@ -1,0 +1,34 @@
+{
+  "edges": [],
+  "nodes": [
+    {
+      "idea_id": "idea:d3bf5354de3f1f42",
+      "source_gap_ids": [
+        "gap:b110438b12376010"
+      ],
+      "status": "phase6_ready"
+    },
+    {
+      "idea_id": "idea:5e301f25743423ef",
+      "source_gap_ids": [
+        "gap:b110438b12376010"
+      ],
+      "status": "phase6_ready"
+    },
+    {
+      "idea_id": "idea:bdf48a9c899cef36",
+      "source_gap_ids": [
+        "gap:b110438b12376010"
+      ],
+      "status": "not_ready_for_experiment"
+    },
+    {
+      "idea_id": "idea:638e03732df2e58b",
+      "source_gap_ids": [
+        "gap:b110438b12376010"
+      ],
+      "status": "phase6_ready"
+    }
+  ],
+  "schema_version": "0.1.0"
+}

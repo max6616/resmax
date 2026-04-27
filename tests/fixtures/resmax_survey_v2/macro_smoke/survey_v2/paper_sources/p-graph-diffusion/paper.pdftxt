@@ -1,0 +1,3 @@
+Graph Diffusion Planning improves benchmark control for graph reasoning tasks and reports dataset transfer evaluation across planning environments.
+
+The method requires expensive diffusion sampling at inference time, so compute cost and low compute ablation remain important limitations for practical reuse.

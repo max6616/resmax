@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "resmax://schemas/retrieval_trace",
+  "title": "RetrievalTrace",
+  "schema_version": "0.1.0",
+  "type": "object",
+  "required": ["schema_version", "state_id", "trace_id", "created_at", "input_hash", "parent_state_ids", "producer", "research_spec_id", "query_id", "retrieval_method", "mode", "corpus_snapshot_hash", "accepted_index_sha256", "embedding_cache_meta", "query", "filters", "top_k", "returned_paper_ids", "degraded_reason", "result_count", "results"],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {"type": "string", "enum": ["0.1.0"]},
+    "state_id": {"type": "string", "pattern": "^[a-z][a-z0-9_]*:[0-9a-f]{8,64}$"},
+    "trace_id": {"type": "string", "pattern": "^[a-z][a-z0-9_]*:[0-9a-f]{8,64}$"},
+    "created_at": {"type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}T"},
+    "input_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "parent_state_ids": {"type": "array", "items": {"type": "string"}},
+    "producer": {"type": "object", "required": ["name"], "additionalProperties": false, "properties": {"name": {"type": "string", "minLength": 1}, "version": {"type": "string"}, "run_id": {"type": "string"}}},
+    "research_spec_id": {"type": "string", "minLength": 1},
+    "query_id": {"type": "string", "minLength": 1},
+    "retrieval_method": {"type": "string", "enum": ["keyword", "embedding", "hybrid", "review_cache", "metadata"]},
+    "mode": {"type": "string", "enum": ["keyword", "embedding", "hybrid", "review_cache", "metadata"]},
+    "corpus_snapshot_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "accepted_index_sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "embedding_cache_meta": {"type": "object"},
+    "query": {"type": "string"},
+    "filters": {"type": "object"},
+    "top_k": {"type": "integer", "minimum": 0},
+    "returned_paper_ids": {"type": "array", "items": {"type": "string"}},
+    "degraded_reason": {"type": "string"},
+    "result_count": {"type": "integer", "minimum": 0},
+    "results": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["paper_id", "rank", "score", "evidence_status"],
+        "additionalProperties": false,
+        "properties": {
+          "paper_id": {"type": "string", "minLength": 1},
+          "rank": {"type": "integer", "minimum": 1},
+          "score": {"type": "number"},
+          "evidence_status": {"type": "string", "enum": ["unknown", "not_found", "not_applicable", "insufficient_evidence", "supported", "contradicted", "mixed"]}
+        }
+      }
+    }
+  }
+}

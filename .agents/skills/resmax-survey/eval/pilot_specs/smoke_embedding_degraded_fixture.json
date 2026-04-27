@@ -1,0 +1,19 @@
+{
+  "schema_version": "0.1.0",
+  "name": "smoke_embedding_degraded_fixture",
+  "corpus": {
+    "accepted_csv": "tests/fixtures/corpus_api/accepted_index.csv",
+    "reviews_dir": "tests/fixtures/corpus_api/reviews",
+    "embedding_cache": "tests/fixtures/corpus_api/missing_embedding_cache.npz"
+  },
+  "baselines": [
+    {
+      "name": "embedding_missing_cache",
+      "mode": "embedding",
+      "query": "scene graph",
+      "filters": {},
+      "top_k": 2,
+      "expected_paper_ids": []
+    }
+  ]
+}

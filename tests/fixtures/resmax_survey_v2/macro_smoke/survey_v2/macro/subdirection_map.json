@@ -1,0 +1,22 @@
+{
+  "schema_version": "0.1.0",
+  "subdirections": [
+    {
+      "subdirection_id": "sdir_graph_reasoning",
+      "label": "Graph reasoning and planning",
+      "description": "Macro-level graph reasoning cluster for Phase 3 fixture smoke.",
+      "paper_ids": ["p-scene-graph", "p-graph-diffusion", "p-language-agent"],
+      "query_roles": ["benchmark_opportunity"],
+      "positive_signals": ["benchmark_mentions", "implementation_reuse", "recent_top_venue"],
+      "difficulty_signals": ["baseline_burden_unknown", "compute_burden_unknown", "implementation_reference_unknown"],
+      "evidence_status": "weak",
+      "roi_unknowns": ["baseline_burden", "compute_burden", "reviewer_risk"],
+      "representative_papers": [
+        {"paper_id": "p-scene-graph", "title": "Scene Graph Transformers", "venue": "CVPR", "year": "2025"},
+        {"paper_id": "p-graph-diffusion", "title": "Graph Diffusion Planning", "venue": "ICLR", "year": "2024"}
+      ],
+      "paper_count": 3
+    }
+  ],
+  "notes": ["Fixture subdirection for Phase 3 pack smoke."]
+}

@@ -78,11 +78,118 @@ Sci-Hub 灰色 fallback 默认关闭；只有用户显式要求时才传 `--enab
 - `filter_log.md` / `filter_log_state.json`：可读日志和可恢复状态。
 - `deepcheck_prompts.json`：后续 repo-review/deepcheck 的 subagent prompt。
 
+## V2 开发说明
+
+- 后续 macro survey / evidence-first 流程应优先通过 `.agents/skills/_shared/resmax_core/corpus_api.py` 读取 `accepted_index.csv`、review JSON、source text status 和 embedding cache metadata。
+- `corpus_api.py` 是只读 data plane：不提供 write/update/delete，也不把 keyword hit、citation count 或 embedding similarity 当作 ROI。
+- 开发和 eval smoke 优先使用 `.agents/skills/resmax-survey/eval/run_baseline.py` 与 fixture spec；生产 survey 仍必须先满足数据库 validator 门槛。
+- Phase 2 macro survey 入口为：
+
+```bash
+PYTHONPATH=.agents/skills/resmax-survey/scripts python3 -m resmax_survey_v2 compile-spec \
+  --intent "研究意图" \
+  --out-dir literature_research/<direction_slug>
+
+PYTHONPATH=.agents/skills/resmax-survey/scripts python3 -m resmax_survey_v2 retrieve-macro \
+  --spec literature_research/<direction_slug>/survey_v2/spec/research_spec.json \
+  --accepted paper_database/accepted_index.csv \
+  --embedding-cache paper_database/embedding_cache/qwen3_8b.npz \
+  --embedding-provider ssh \
+  --require-embedding \
+  --out-dir literature_research/<direction_slug>
+
+PYTHONPATH=.agents/skills/resmax-survey/scripts python3 -m resmax_survey_v2 validate \
+  --dir literature_research/<direction_slug>
+```
+
+V2 macro 输出只允许作为 broad candidate set、subdirection map 和 low-confidence rough ROI；不得在 Phase 2 产出 final idea、strong recommendation 或 experiment plan。
+
+生产 Phase 2 不能静默退化为 keyword-only：hybrid/semantic query 必须写入 `survey_v2/macro/query_embedding_trace.jsonl`，并在 `manifest.json` 记录 provider、维度、成功/失败数量。长执行命令必须持续打印阶段性进度，包括 corpus/embedding metadata 加载、query embedding 编码、逐 query 检索、candidate 聚合和 subdirection 聚类。
+
+## V2 Phase 3 ResearchPack
+
+Phase 3 入口在同一个 `resmax_survey_v2` package 下，不新增 skill 或平台层。它只消费 Phase 2 的 macro pack，对选定子方向的 top candidates 做 targeted evidence extraction：
+
+```bash
+PYTHONPATH=.agents/skills/resmax-survey/scripts python3 -m resmax_survey_v2 build-pack \
+  --macro-dir literature_research/<direction_slug> \
+  --out-dir /tmp/resmax_research_pack
+
+python3 .agents/skills/_shared/resmax_core/validators/validate_research_pack.py \
+  --pack /tmp/resmax_research_pack/research_pack
+```
+
+可拆开的子命令为 `select-subdirection`、`extract-evidence`、`compile-tension`、`build-pack`、`validate-pack`。
+
+生产路径必须先对 selected candidates 执行 targeted source materialization。`build-pack` 默认会在 `select-subdirection` 之后运行该步骤；手动拆阶段时使用：
+
+```bash
+PYTHONPATH=.agents/skills/resmax-survey/scripts python3 -m resmax_survey_v2 select-subdirection \
+  --macro-dir literature_research/<direction_slug> \
+  --out-dir literature_research/<direction_slug>
+
+PYTHONPATH=.agents/skills/resmax-survey/scripts python3 -m resmax_survey_v2 materialize-sources \
+  --macro-dir literature_research/<direction_slug> \
+  --out-dir literature_research/<direction_slug>
+```
+
+该步骤只处理 selected subdirection 的候选论文。生产默认把可复用论文资产写入全局 cache `paper_database/source_cache/<safe_paper_id>/`，包括 `paper.pdf`、`paper.pdftxt`、`paper.tex`、`paper.md` 或 `manual.md`；单次调研目录只保存 ResearchPack 引用、manifest hash 和 materialization report。后续方向检索到同一论文时必须优先复用全局 cache，再尝试官方/OA/arXiv/OpenReview/DOI/PDF/title-only search 补全。临时 fixture 或 repo 外 smoke 可以继续使用该调研目录下的 `survey_v2/paper_sources/`，避免污染生产 cache。
+
+Sci-Hub 默认关闭；不得对全库做 full-text 解析。若无法 materialize readable source，必须写入 `source_materialization_report.json` 和 missing reports；abstract fallback 只能作为 weak/degraded evidence，不可替代 full-text gate。生产 ResearchPack validator 要求 selected candidates 的 readable source coverage 至少 95%，且不能出现“全部 evidence 都来自 abstract fallback”的通过状态。
+
+Phase 3 输出目录为 `research_pack/`，事实源是 JSON/JSONL 和 manifest hash；`coverage_report.md` 与 `field_map.md` 只是可读视图。默认自动选择 top rough ROI 子方向并标记 `auto_selected=true`，也可以显式传 `--subdirection-id`。候选数遵循 `ResearchSpec.budget_policy.max_targeted_evidence_candidates`，默认不超过 30。
+
+边界：
+
+- 只处理 selected subdirection top candidates，不做全库 full-text 解析。
+- 生产执行必须先尝试 materialize selected candidates 的 `paper_database/source_cache/<safe_paper_id>/paper.tex`、`paper.pdftxt`、`paper.md` 或 `manual.md` 缓存；Sci-Hub 默认关闭，MinerU 只消费已有 markdown cache。
+- 缺失 source/PDF 写入 `missing_source_report.json` 和 `missing_pdf_report.json`，不得静默跳过。
+- `EvidenceCard` 必须引用 `EvidenceSpan`；`GapMap` 必须引用 claim/evidence，或显式使用 `missing_evidence`。
+- 本阶段只生成 `EvidenceSpan`、`EvidenceCard`、`ClaimGraph`、`GapMap` 和 pack manifest，不生成 idea、final recommendation 或 experiment plan。
+
+## V2 Phase 4 Reviewer-Pressure ROI
+
+Phase 4 仍在同一个 `resmax_survey_v2` package 和既有 `research_pack/` contract 内演进，不新增 `resmax-review` 或新的 skill。它消费 Phase 3 pack、review cache 和 metadata，输出 reviewer pressure notes、paper roles、role-aware matrices、ROI lens、risk register 和 Phase 5 idea seed constraints：
+
+```bash
+PYTHONPATH=.agents/skills/resmax-survey/scripts python3 -m resmax_survey_v2 build-roi-lens \
+  --pack literature_research/<direction_slug>/research_pack \
+  --accepted paper_database/accepted_index.csv \
+  --reviews paper_database/reviews \
+  --out /tmp/resmax_roi_pack
+
+python3 .agents/skills/_shared/resmax_core/validators/validate_research_pack.py \
+  --pack /tmp/resmax_roi_pack/research_pack
+```
+
+可拆开的子命令为 `extract-reviewer-pressure`、`assign-paper-roles`、`build-roi-lens`、`validate-roi-pack`。
+
+Phase 4 输出包括：
+
+- `reviewer_pressure_notes.jsonl`
+- `paper_roles.json`
+- `baseline_matrix.csv`
+- `benchmark_matrix.csv`
+- `implementation_matrix.csv`
+- `gap_roi_table.csv`
+- `roi_lens.json`
+- `risk_register.md`
+- `idea_seed_constraints.md`
+
+边界：
+
+- reviewer pressure 优先来自真实 `paper_database/reviews` cache；任何推断项必须显式标记 `inferred`。
+- reviewer objection 只进入 gap/ROI lens 和 seed constraints，不直接生成 idea。
+- ROI 保留 positive dimensions、difficulty dimensions、unknowns、reviewer blockers 和 confidence；不得让单一 ROI 总分统治排序。
+- `unknown` 不当作 0 分；必须降低 confidence 或生成 follow-up retrieval target。
+- `risk_register.md` 和 `idea_seed_constraints.md` 是展示/交接层；`roi_lens.json`、`reviewer_pressure_notes.jsonl`、`paper_roles.json` 和 manifest hash 是事实源。
+
 ## Agent 阶段输出
 
 - `scores_raw.json`：Stage 5 subagent 原始评分。
 - `deepcheck_reviews.json` / `deepcheck_results.md`：Stage 5.5 开源质量深查。
-- `paper_sources/<paper_id>/`：TeX/PDF text/MinerU MD 缓存。
+- `paper_database/source_cache/<safe_paper_id>/`：生产可复用 TeX/PDF text/MinerU MD/manual source cache。
+- `survey_v2/paper_sources/<paper_id>/`：仅作为旧调研目录或 fixture 兼容 fallback。
 
 ## 失败处理
 

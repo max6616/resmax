@@ -1,0 +1,25 @@
+{
+  "schema_version": "0.1.0",
+  "state_id": "source_policy:33333333",
+  "created_at": "2026-04-27T00:02:00Z",
+  "input_hash": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+  "parent_state_ids": ["research_spec:11111111"],
+  "producer": {"name": "phase0-fixture", "version": "0.1.0", "run_id": "fixture"},
+  "research_spec_id": "research_spec:11111111",
+  "allowed_source_tiers": ["full_text", "landing_only", "listing_only", "metadata_plus_aux", "metadata_only", "unknown"],
+  "allowed_retrieval_modes": ["keyword", "hybrid", "embedding"],
+  "disallowed_sources": ["sci_hub", "mineru", "full_text_extraction"],
+  "disabled_capabilities": ["full_text_extraction", "mineru", "sci_hub", "final_idea_generation", "experiment_plan"],
+  "claim_support_policy": {
+    "rough_roi_only": true,
+    "allow_strong_recommendation": false,
+    "unknown_must_remain_unknown": true
+  },
+  "evidence_defaults": {
+    "rough_roi": "weak",
+    "benchmark_burden": "unknown",
+    "compute_burden": "unknown",
+    "baseline_burden": "unknown",
+    "reviewer_risk": "unknown"
+  }
+}

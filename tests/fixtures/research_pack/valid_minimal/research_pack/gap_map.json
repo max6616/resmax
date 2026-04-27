@@ -1,0 +1,85 @@
+{
+  "claim_graph_id": "claim_graph:b59f3b7bf1a361f6",
+  "created_at": "2026-04-27T03:52:57Z",
+  "gaps": [
+    {
+      "confidence": "low",
+      "description": "Evidence suggests a resource or compute-cost angle inside Graph reasoning and planning.",
+      "evidence_card_ids": [
+        "evidence_card:887d7bcaa96d5497",
+        "evidence_card:c39e0573d1607454"
+      ],
+      "evidence_status": "supported",
+      "gap_id": "gap:b110438b12376010",
+      "gap_type": "resource_arbitrage",
+      "roi_signals": {
+        "difficulty": [
+          "baseline_burden_unknown",
+          "compute_burden_unknown",
+          "implementation_reference_unknown"
+        ],
+        "positive": [
+          "benchmark_mentions",
+          "implementation_reuse",
+          "recent_top_venue"
+        ],
+        "reviewer_blockers": [],
+        "unknowns": [
+          "baseline_burden",
+          "compute_burden",
+          "reviewer_risk"
+        ]
+      },
+      "scope": "sdir_graph_reasoning",
+      "supporting_claim_ids": [
+        "claim:2ee123f58086aa52",
+        "claim:89bfef6fd4688576"
+      ]
+    },
+    {
+      "confidence": "low",
+      "description": "Full-text coverage is incomplete for Graph reasoning and planning; missing papers must be resolved before stronger claims.",
+      "evidence_card_ids": [],
+      "evidence_status": "insufficient_evidence",
+      "gap_id": "gap:cec70bb389af71f4",
+      "gap_type": "missing_evidence",
+      "roi_signals": {
+        "difficulty": [
+          "baseline_burden_unknown",
+          "compute_burden_unknown",
+          "implementation_reference_unknown",
+          "source_coverage_incomplete"
+        ],
+        "positive": [
+          "benchmark_mentions",
+          "implementation_reuse",
+          "recent_top_venue"
+        ],
+        "reviewer_blockers": [
+          "evidence_coverage"
+        ],
+        "unknowns": [
+          "baseline_burden",
+          "compute_burden",
+          "reviewer_risk",
+          "full_text_availability"
+        ]
+      },
+      "scope": "sdir_graph_reasoning",
+      "supporting_claim_ids": [
+        "claim:2ee123f58086aa52"
+      ]
+    }
+  ],
+  "input_hash": "sha256:4a163370f4fedd2c0bf5761b28b8a4da912ca781dd2ea0d805dcbade636942d9",
+  "parent_state_ids": [
+    "claim_graph:b59f3b7bf1a361f6"
+  ],
+  "producer": {
+    "name": "resmax_survey_v2.phase3_pack",
+    "run_id": "phase3",
+    "version": "0.1.0"
+  },
+  "schema_version": "0.1.0",
+  "state_id": "gap_map:4a163370f4fedd2c"
+}
