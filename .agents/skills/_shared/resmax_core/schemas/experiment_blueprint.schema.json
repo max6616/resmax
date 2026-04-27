@@ -224,7 +224,7 @@
         "human_gate_required": {"type": "boolean"},
         "execution_status": {
           "type": "string",
-          "enum": ["executable", "human_gate_required", "insufficient_evidence", "follow_up_required"]
+          "enum": ["executable", "approval_required", "human_gate_required", "insufficient_evidence", "follow_up_required"]
         },
         "unresolved_blockers": {
           "type": "array",

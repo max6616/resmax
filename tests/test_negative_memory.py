@@ -87,9 +87,35 @@ def _write_memory(reviews: Path, plan: Path, memory: Path) -> subprocess.Complet
             str(plan),
             "--memory",
             str(memory),
+            "--confirm-write",
         ],
         _env(IDEA_SCRIPTS),
     )
+
+
+def test_negative_memory_requires_explicit_confirm_write(tmp_path: Path) -> None:
+    reviews = _aggregate_reviews(tmp_path)
+    plan = _compile_plan(tmp_path, reviews)
+    memory = tmp_path / "resmax_memory"
+
+    result = _run(
+        [
+            sys.executable,
+            "-m",
+            "resmax_idea",
+            "write-negative-memory",
+            "--reviews",
+            str(reviews),
+            "--experiment-plan",
+            str(plan),
+            "--memory",
+            str(memory),
+        ],
+        _env(IDEA_SCRIPTS),
+    )
+    assert result.returncode == 1
+    assert "G8 negative memory write gate required" in result.stdout + result.stderr
+    assert not (memory / "negative_memory.jsonl").exists()
 
 
 def test_killed_idea_writes_blocker_negative_memory(tmp_path: Path) -> None:

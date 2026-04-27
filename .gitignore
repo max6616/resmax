@@ -50,4 +50,12 @@ tmp/
 _archive_paperAnalysis/
 _archive_resmax/
 docs/
+!docs/
+docs/*
+!docs/resmax_development_plan_v2/
+docs/resmax_development_plan_v2/*
+!docs/resmax_development_plan_v2/interaction_gate_policy.md
 .codex/response-summary-log.md
+
+skill-tests/runs/*
+!skill-tests/runs/.gitkeep

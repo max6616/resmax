@@ -107,13 +107,14 @@ def _experiment_block(
     ]
     estimated_cost = _estimated_cost(card, baseline, dataset)
     over_budget = estimated_cost["budget_status"] == "over_budget"
-    human_gate_required = over_budget or estimated_cost["budget_status"] in {"unknown_needs_followup", "approval_required"}
+    budget_gate_required = over_budget or estimated_cost["budget_status"] in {"unknown_needs_followup", "approval_required"}
+    human_gate_required = True
     if missing_contracts:
         execution_status = "insufficient_evidence"
-    elif human_gate_required:
+    elif budget_gate_required:
         execution_status = "human_gate_required"
     else:
-        execution_status = "executable"
+        execution_status = "approval_required"
 
     tested_claim = str(card.get("primary_claim") or "unknown_needs_followup")
     anti_claim = _anti_claim(card, decision)

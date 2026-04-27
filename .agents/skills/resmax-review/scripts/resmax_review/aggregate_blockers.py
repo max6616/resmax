@@ -39,10 +39,24 @@ def aggregate_reviews(
     all_ideas: bool = False,
 ) -> dict[str, Any]:
     out.mkdir(parents=True, exist_ok=True)
-    build_evidence_packages(ideas=ideas, out=out, pack=pack, max_ideas=max_ideas, all_ideas=all_ideas)
     idea_ctx = load_idea_context(ideas)
-    selected_cards = select_review_cards(idea_ctx.cards, max_ideas=max_ideas, all_ideas=all_ideas)
     raw_index = _copy_and_load_raw_reviews(raw_reviews, out / "raw")
+    raw_idea_ids = {idea_id for _, idea_id in raw_index}
+    aggregate_available_raw = bool(raw_idea_ids) and not all_ideas
+    build_evidence_packages(
+        ideas=ideas,
+        out=out,
+        pack=pack,
+        max_ideas=max_ideas,
+        all_ideas=all_ideas or aggregate_available_raw,
+    )
+    selected_cards = select_review_cards(
+        idea_ctx.cards,
+        max_ideas=max_ideas,
+        all_ideas=all_ideas or aggregate_available_raw,
+    )
+    if aggregate_available_raw:
+        selected_cards = [card for card in selected_cards if card.get("idea_id") in raw_idea_ids]
     decisions: list[dict[str, Any]] = []
     for card in selected_cards:
         decisions.append(_aggregate_one(card, idea_ctx.closest_checks.get(card["idea_id"], {}), raw_index, out, required_roles))

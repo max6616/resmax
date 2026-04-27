@@ -18,6 +18,8 @@ PRODUCER = {"name": "resmax_survey_v2.phase3_pack", "version": SCHEMA_VERSION, "
 REPO_ROOT = Path(__file__).resolve().parents[5]
 GLOBAL_SOURCE_CACHE = REPO_ROOT / "paper_database" / "source_cache"
 MAX_DEFAULT_EVIDENCE_CANDIDATES = 30
+DEFAULT_MODE = "production"
+NON_INTERACTIVE_MODES = {"test", "dev", "debug", "smoke"}
 EVIDENCE_TERMS = (
     "benchmark",
     "evaluation",
@@ -90,6 +92,8 @@ def select_subdirection(
     out_dir: Path,
     subdirection_id: str = "",
     max_candidates: int | None = None,
+    allow_auto_select: bool = False,
+    mode: str = DEFAULT_MODE,
 ) -> dict[str, Any]:
     macro_root = resolve_macro_root(macro_dir)
     pack_dir = resolve_pack_dir(out_dir)
@@ -105,6 +109,33 @@ def select_subdirection(
     selection_method = "explicit_subdirection_id"
     selected_id = subdirection_id.strip()
     if not selected_id:
+        if not allow_auto_select:
+            _write_pending_gate(
+                pack_dir,
+                gate_id="G1",
+                phase="Phase 2 -> Phase 3",
+                trigger="build-pack or select-subdirection was called without --subdirection-id",
+                user_question=(
+                    "Select one subdirection_id from subdirection_map.json or subdirection_roi_table.csv, "
+                    "or explicitly rerun with --allow-auto-select for a non-production smoke/dev/debug/test path."
+                ),
+                allowed_answers=[
+                    "rerun with --subdirection-id <id>",
+                    "rerun with --allow-auto-select only for smoke/dev/debug/test",
+                    "stop and refine the Phase 2 macro survey",
+                ],
+                default_action="stop",
+                artifacts_to_show=[
+                    "survey_v2/macro/subdirection_map.json",
+                    "survey_v2/macro/subdirection_roi_table.csv",
+                    "survey_v2/macro/macro_survey_report.md",
+                ],
+                mode=mode,
+            )
+            raise ValueError(
+                "G1 subdirection selection gate required: pass --subdirection-id, "
+                "or explicitly pass --allow-auto-select for a smoke/dev/debug/test path."
+            )
         if not roi_rows:
             raise ValueError("subdirection_roi_table.csv has no rows")
         selected_id = _auto_select_subdirection(roi_rows, candidates, research_spec)
@@ -141,6 +172,7 @@ def select_subdirection(
         "description": entry.get("description", ""),
         "auto_selected": auto_selected,
         "selection_method": selection_method,
+        "execution_mode": mode,
         "candidate_limit": candidate_limit,
         "paper_count": len(selected_candidates),
         "selected_candidate_ids": [row["paper_id"] for row in selected_candidates],
@@ -174,6 +206,8 @@ def extract_evidence(
     out_dir: Path,
     source_cache_dir: Path | None = None,
     max_spans_per_paper: int = 3,
+    allow_abstract_fallback: bool = False,
+    mode: str = DEFAULT_MODE,
 ) -> dict[str, Any]:
     macro_root = resolve_macro_root(macro_dir)
     pack_dir = resolve_pack_dir(out_dir)
@@ -205,7 +239,7 @@ def extract_evidence(
                 max_spans=max_spans_per_paper,
             )
 
-        if not paper_spans:
+        if not paper_spans and allow_abstract_fallback:
             fallback_spans = _extract_abstract_spans_for_paper(
                 row=row,
                 scope=selected["selected_subdirection_id"],
@@ -233,7 +267,7 @@ def extract_evidence(
     _write_jsonl(pack_dir / "evidence_cards.jsonl", cards)
     _write_json(pack_dir / "missing_source_report.json", {"schema_version": SCHEMA_VERSION, "records": missing_source})
     _write_json(pack_dir / "missing_pdf_report.json", {"schema_version": SCHEMA_VERSION, "records": missing_pdf})
-    return {
+    coverage = {
         "selected_candidate_count": len(selected["selected_candidate_ids"]),
         "papers_with_evidence": len({span["paper_id"] for span in spans if span.get("extraction_status") == "extracted"}),
         "evidence_span_count": len([span for span in spans if span.get("extraction_status") == "extracted"]),
@@ -249,6 +283,36 @@ def extract_evidence(
             ]
         ),
     }
+    if (
+        coverage.get("abstract_fallback_count", 0) or coverage.get("missing_source_count", 0)
+    ) and not allow_abstract_fallback:
+        _write_pending_gate(
+            pack_dir,
+            gate_id="G2",
+            phase="Phase 3 evidence extraction",
+            trigger="full-text evidence is incomplete for one or more selected candidates",
+            user_question="Approve degraded weak evidence, provide stronger sources, or choose a different subdirection?",
+            allowed_answers=[
+                "replenish source cache and rerun",
+                "rerun with --allow-abstract-fallback for weak/degraded evidence",
+                "switch subdirection",
+            ],
+            default_action="stop",
+            artifacts_to_show=[
+                "source_materialization_report.json",
+                "missing_source_report.json",
+                "missing_pdf_report.json",
+            ],
+            mode=mode,
+            details=coverage,
+        )
+        raise ValueError(
+            "G2 evidence expansion gate required: "
+            f"missing_source_count={coverage.get('missing_source_count', 0)} "
+            f"abstract_fallback_count={coverage.get('abstract_fallback_count', 0)}. "
+            "Pass --allow-abstract-fallback only after explicit approval to continue with degraded evidence."
+        )
+    return coverage
 
 
 def materialize_sources(
@@ -414,6 +478,9 @@ def build_pack(
     disable_oa_api: bool = False,
     enable_sci_hub: bool = False,
     overwrite_sources: bool = False,
+    allow_auto_select: bool = False,
+    allow_abstract_fallback: bool = False,
+    mode: str = DEFAULT_MODE,
     progress: bool = True,
 ) -> dict[str, Any]:
     macro_root = resolve_macro_root(macro_dir)
@@ -425,6 +492,8 @@ def build_pack(
         out_dir=pack_dir,
         subdirection_id=subdirection_id,
         max_candidates=max_candidates,
+        allow_auto_select=allow_auto_select,
+        mode=mode,
     )
     materialization: dict[str, Any] = {}
     if not skip_source_materialization:
@@ -437,12 +506,74 @@ def build_pack(
             overwrite_sources=overwrite_sources,
             progress=progress,
         )
+        if _source_gate_required(materialization) and not allow_abstract_fallback:
+            _write_pending_gate(
+                pack_dir,
+                gate_id="G2",
+                phase="Phase 3 source materialization",
+                trigger="selected candidates do not have complete readable full-text coverage",
+                user_question=(
+                    "Choose whether to replenish sources, enable approved source tooling, switch direction, "
+                    "or explicitly continue with weak/degraded abstract fallback."
+                ),
+                allowed_answers=[
+                    "replenish source cache and rerun",
+                    "rerun with --enable-sci-hub only if explicitly allowed",
+                    "provide approved MinerU/manual markdown cache and rerun",
+                    "rerun with --allow-abstract-fallback for degraded evidence",
+                    "switch subdirection",
+                ],
+                default_action="stop",
+                artifacts_to_show=[
+                    "source_materialization_report.json",
+                ],
+                mode=mode,
+                details=materialization.get("counts", {}),
+            )
+            counts = materialization.get("counts", {})
+            raise ValueError(
+                "G2 evidence expansion gate required: readable_source_count="
+                f"{counts.get('readable_source_count', 0)}/{counts.get('selected_candidate_count', 0)}. "
+                "Inspect source_materialization_report.json, replenish sources, or explicitly pass "
+                "--allow-abstract-fallback for degraded evidence."
+            )
     coverage = extract_evidence(
         macro_dir=macro_root,
         out_dir=pack_dir,
         source_cache_dir=_effective_source_cache_dir(macro_root, source_cache_dir),
         max_spans_per_paper=max_spans_per_paper,
+        allow_abstract_fallback=allow_abstract_fallback,
+        mode=mode,
     )
+    if (
+        coverage.get("abstract_fallback_count", 0) or coverage.get("missing_source_count", 0)
+    ) and not allow_abstract_fallback:
+        _write_pending_gate(
+            pack_dir,
+            gate_id="G2",
+            phase="Phase 3 evidence extraction",
+            trigger="full-text evidence is incomplete for one or more selected candidates",
+            user_question="Approve degraded weak evidence, provide stronger sources, or choose a different subdirection?",
+            allowed_answers=[
+                "replenish source cache and rerun",
+                "rerun with --allow-abstract-fallback for weak/degraded evidence",
+                "switch subdirection",
+            ],
+            default_action="stop",
+            artifacts_to_show=[
+                "source_materialization_report.json",
+                "missing_source_report.json",
+                "missing_pdf_report.json",
+            ],
+            mode=mode,
+            details=coverage,
+        )
+        raise ValueError(
+            "G2 evidence expansion gate required: "
+            f"missing_source_count={coverage.get('missing_source_count', 0)} "
+            f"abstract_fallback_count={coverage.get('abstract_fallback_count', 0)}. "
+            "Pass --allow-abstract-fallback only after explicit approval to continue with degraded evidence."
+        )
     tension = compile_tension(out_dir=pack_dir)
     _write_coverage_report(pack_dir, selected, coverage)
     _write_field_map(pack_dir)
@@ -463,6 +594,46 @@ def _copy_macro_artifacts(macro_root: Path, pack_dir: Path) -> None:
         if not src.exists():
             raise FileNotFoundError(f"required macro artifact missing: {src}")
         shutil.copyfile(src, pack_dir / dst_name)
+
+
+def _source_gate_required(materialization: dict[str, Any]) -> bool:
+    counts = materialization.get("counts", {}) if isinstance(materialization, dict) else {}
+    selected = int(counts.get("selected_candidate_count") or 0)
+    missing = int(counts.get("missing_readable_source_count") or 0)
+    if selected <= 0:
+        return False
+    return missing > 0
+
+
+def _write_pending_gate(
+    pack_dir: Path,
+    *,
+    gate_id: str,
+    phase: str,
+    trigger: str,
+    user_question: str,
+    allowed_answers: list[str],
+    default_action: str,
+    artifacts_to_show: list[str],
+    mode: str,
+    details: dict[str, Any] | None = None,
+) -> None:
+    payload = {
+        "schema_version": SCHEMA_VERSION,
+        "gate_id": gate_id,
+        "phase": phase,
+        "trigger": trigger,
+        "user_question": user_question,
+        "allowed_answers": allowed_answers,
+        "default_action_if_no_answer": default_action,
+        "artifact_to_show_before_asking": artifacts_to_show,
+        "artifact_written_after_decision": f"pending_gate_{gate_id.lower()}.json",
+        "non_interactive_exception": sorted(NON_INTERACTIVE_MODES),
+        "execution_mode": mode,
+        "created_at": utc_now(),
+        "details": details or {},
+    }
+    _write_json(pack_dir / f"pending_gate_{gate_id.lower()}.json", payload)
 
 
 def _write_manifest(

@@ -2,7 +2,7 @@
   "blockers": [],
   "created_at": "2026-04-27T00:00:00Z",
   "decision_status": "promoted",
-  "evidence_package_hash": "sha256:bf15f63c6710880d7af87abb1b240801df78dbf2f89eeb157463fc6794b9a14e",
+  "evidence_package_hash": "sha256:cdcf34c08167deb307bde65c8bcf934203b83e0da86cbc93ce9e9a48ba14fb9d",
   "generator_model": "generator-model-a",
   "idea_id": "idea:638e03732df2e58b",
   "input_hash": "sha256:30ec3668a9888059e19734770435ffe136d0bf83e0cf11f3e9957eb88cd3dd92",

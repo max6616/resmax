@@ -114,6 +114,7 @@ def run_reviewers(
     max_ideas: int = 1,
     all_ideas: bool = False,
     concurrency: int = 5,
+    allow_same_model_review: bool = False,
 ) -> dict[str, Any]:
     out.mkdir(parents=True, exist_ok=True)
     build_evidence_packages(ideas=ideas, out=out, pack=pack, max_ideas=max_ideas, all_ideas=all_ideas)
@@ -156,6 +157,7 @@ def run_reviewers(
                         max_tokens=max_tokens,
                         generator_model=generator_model,
                         retries=retries,
+                        allow_same_model_review=allow_same_model_review,
                         task=task,
                     )
                 )
@@ -168,6 +170,7 @@ def run_reviewers(
                         max_tokens=max_tokens,
                         generator_model=generator_model,
                         retries=retries,
+                        allow_same_model_review=allow_same_model_review,
                         task=task,
                     )
                     for task in tasks
@@ -191,6 +194,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--max-ideas", type=int, default=1)
     parser.add_argument("--all-ideas", action="store_true")
     parser.add_argument("--concurrency", type=int, default=5)
+    parser.add_argument("--allow-same-model-review", action="store_true")
     args = parser.parse_args(argv)
     roles = tuple(role.strip() for role in args.roles.split(",") if role.strip())
     unsupported = [role for role in roles if role not in REVIEWER_ROLES]
@@ -210,6 +214,7 @@ def main(argv: list[str] | None = None) -> int:
         max_ideas=args.max_ideas,
         all_ideas=args.all_ideas,
         concurrency=args.concurrency,
+        allow_same_model_review=args.allow_same_model_review,
     )
     print(f"[review] ran reviewers provider={args.provider} written={result['written']} skipped={result['skipped']} out={args.out}")
     return 0
@@ -301,6 +306,7 @@ def _run_review_task(
     max_tokens: int,
     generator_model: str,
     retries: int,
+    allow_same_model_review: bool,
     task: dict[str, Any],
 ) -> Path:
     role = task["role"]
@@ -319,6 +325,7 @@ def _run_review_task(
             evidence_package_path=task["package_path"],
             generator_model=generator_model,
             retries=retries,
+            allow_same_model_review=allow_same_model_review,
         )
     write_json(task["target"], trace)
     print(
@@ -338,13 +345,28 @@ def _review_one(
     evidence_package: dict[str, Any],
     evidence_package_path: Path,
     generator_model: str,
+    allow_same_model_review: bool = False,
 ) -> dict[str, Any]:
     prompt = build_prompt(role, evidence_package)
     prompt_hash = build_prompt_hash(role, evidence_package)
     response = caller.review(role, prompt, evidence_package)
-    raw_response = str(response.get("content") or "")
+    raw_response = str(response.get("content") or "").strip()
+    if not raw_response:
+        raise RuntimeError("empty reviewer response")
     parsed = _parse_review_response(raw_response)
     reviewer_model = str(response.get("model") or provider)
+    if reviewer_model == generator_model and not allow_same_model_review:
+        return _same_model_not_allowed_trace(
+            provider=provider,
+            role=role,
+            evidence_package=evidence_package,
+            evidence_package_path=evidence_package_path,
+            generator_model=generator_model,
+            reviewer_model=reviewer_model,
+            prompt=prompt,
+            prompt_hash=prompt_hash,
+            raw_response=raw_response,
+        )
     blockers = _normalize_blockers(parsed.get("blockers"), evidence_package)
     recommended_status = _normalize_status(parsed.get("recommended_status"))
     scores = _normalize_scores(parsed.get("scores"))
@@ -395,6 +417,7 @@ def _review_one_with_retries(
     evidence_package_path: Path,
     generator_model: str,
     retries: int,
+    allow_same_model_review: bool = False,
 ) -> dict[str, Any]:
     attempts = max(0, retries) + 1
     last_error = ""
@@ -407,6 +430,7 @@ def _review_one_with_retries(
                 evidence_package=evidence_package,
                 evidence_package_path=evidence_package_path,
                 generator_model=generator_model,
+                allow_same_model_review=allow_same_model_review,
             )
         except Exception as exc:
             last_error = str(exc)
@@ -476,6 +500,66 @@ def _review_error_trace(
                 "evidence_status": "not_applicable",
                 "evidence_ids": [],
                 "explanation": raw_response,
+            }
+        ],
+        "scores": {"novelty": 0, "feasibility": 0, "evidence_confidence": 0, "review_risk": 5},
+        "recommended_status": "human_gate",
+        "decision_status": "pending",
+    }
+
+
+def _same_model_not_allowed_trace(
+    *,
+    provider: str,
+    role: str,
+    evidence_package: dict[str, Any],
+    evidence_package_path: Path,
+    generator_model: str,
+    reviewer_model: str,
+    prompt: str,
+    prompt_hash: str,
+    raw_response: str,
+) -> dict[str, Any]:
+    raw_review = raw_response.strip()
+    trace_input = {
+        "idea_id": evidence_package["idea_id"],
+        "reviewer_role": role,
+        "prompt_hash": prompt_hash,
+        "raw_response_hash": sha256_text(raw_review),
+        "reviewer_model": reviewer_model,
+        "gate": "same_model_review_not_allowed",
+    }
+    return {
+        "schema_version": SCHEMA_VERSION,
+        "state_id": make_state_id("review_trace", trace_input),
+        "created_at": utc_now(),
+        "input_hash": input_hash(trace_input),
+        "parent_state_ids": [evidence_package.get("package_id", "")],
+        "producer": PRODUCER,
+        "review_id": make_state_id("review", trace_input),
+        "review_trace_id": make_state_id("review_trace", trace_input),
+        "idea_id": evidence_package["idea_id"],
+        "idea_card_id": evidence_package.get("idea_card", {}).get("state_id", ""),
+        "reviewer_role": role,
+        "reviewer_model": reviewer_model,
+        "generator_model": generator_model,
+        "review_independence_confidence": "low",
+        "fallback_reason": "same model used for generation and review; same-model review was not explicitly allowed",
+        "prompt": prompt,
+        "prompt_hash": prompt_hash,
+        "evidence_package_hash": sha256_file(evidence_package_path),
+        "raw_response": raw_review,
+        "raw_review": raw_review,
+        "blockers": [
+            {
+                "blocker_type": "same_model_review_not_allowed",
+                "severity": "fatal",
+                "evidence_status": "not_applicable",
+                "evidence_ids": [],
+                "explanation": (
+                    "Reviewer model matched the generator model. Rerun with --allow-same-model-review only after "
+                    "explicit approval, or use an independent reviewer model."
+                ),
             }
         ],
         "scores": {"novelty": 0, "feasibility": 0, "evidence_confidence": 0, "review_risk": 5},

@@ -5,6 +5,10 @@ description: Compile a validated Phase 4 ResearchPack into evidence-grounded Ide
 
 # resmax-idea
 
+## Interaction Policy
+
+Production/default execution is interactive. The agent must stop at Human Gates and ask the user before changing the idea portfolio, experiment budget, execution permission, or long-term memory. Non-interactive full pipeline execution is allowed only when the user explicitly says test/dev/debug/smoke, and persistent writeback still needs explicit opt-in flags such as `--confirm-write`.
+
 ## When To Use
 
 Use this skill after `resmax-survey` Phase 4 has produced a validated ROI-aware `research_pack/`.
@@ -20,6 +24,9 @@ This is not a topic brainstorm skill. It is a deterministic `ResearchPack -> Ide
 - An IdeaCard without `direct_baselines` is not ready for executable experiment blueprint generation.
 - This skill does not promote, reject by tournament, create `resmax-review`, execute experiments, run training, edit research code, write papers, or claim empirical results.
 - Phase 7 experiment planning only consumes Phase 6 review outputs; a promoted idea without raw ReviewTrace coverage must not enter an experiment block.
+- Phase 5 output stops at G4: show `ideas/idea_cards.jsonl`, `idea_report.md`, closest-work checks, and cheapest falsification notes, then ask which ideas enter Phase 6 review, whether to add human seeds, and which ideas to discard.
+- Phase 7 output stops at G7: write `experiment_blueprint.json` and the human gate package only. Do not run training, evaluation, code edits, paper-result claims, or mark a block executable until the user approves the minimal falsification budget, baseline, dataset, and metric.
+- Negative memory writeback stops at G8 and requires explicit approval. The CLI enforces this with `write-negative-memory --confirm-write`.
 - Negative memory must store structured failure reasons only. Do not write secrets, tokens, personal identifiers, raw prompts, or raw model responses to memory.
 - `idea_report.md` is display-only and must be rendered from structured artifacts.
 
@@ -65,7 +72,8 @@ PYTHONPATH=.agents/skills/resmax-idea/scripts python3 -m resmax_idea compile-exp
 PYTHONPATH=.agents/skills/resmax-idea/scripts python3 -m resmax_idea write-negative-memory \
   --reviews literature_research/<topic>/reviews \
   --experiment-plan literature_research/<topic>/experiment_plan \
-  --memory resmax_memory
+  --memory resmax_memory \
+  --confirm-write
 ```
 
 Optional negative memory is read from `resmax_memory/negative_memory.jsonl` by default. Use `--negative-memory <path>` to override it. Missing memory is recorded as `memory_status=not_found` and is not an error.
@@ -171,7 +179,7 @@ not_applicable
 unknown_needs_followup
 ```
 
-Metric contracts distinguish primary, secondary, sanity, and failure metrics. Missing baseline, dataset, or metric contracts produce `insufficient_evidence` / follow-up plans, not executable experiment blocks.
+Metric contracts distinguish primary, secondary, sanity, and failure metrics. Missing baseline, dataset, or metric contracts produce `insufficient_evidence` / follow-up plans, not executable experiment blocks. Complete contracts produce an approval gate plan, not permission to execute; production `compile-experiment-plan` must not be treated as approval to run experiments.
 
 ## Negative Memory Contract
 

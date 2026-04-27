@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import sys
 from pathlib import Path
 
 from .phase3_pack import extract_evidence
@@ -12,13 +13,21 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--out-dir", required=True, type=Path)
     parser.add_argument("--source-cache-dir", type=Path, default=None)
     parser.add_argument("--max-spans-per-paper", type=int, default=3)
+    parser.add_argument("--allow-abstract-fallback", action="store_true")
+    parser.add_argument("--mode", choices=["production", "test", "dev", "debug", "smoke"], default="production")
     args = parser.parse_args(argv)
-    coverage = extract_evidence(
-        macro_dir=args.macro_dir,
-        out_dir=args.out_dir,
-        source_cache_dir=args.source_cache_dir,
-        max_spans_per_paper=args.max_spans_per_paper,
-    )
+    try:
+        coverage = extract_evidence(
+            macro_dir=args.macro_dir,
+            out_dir=args.out_dir,
+            source_cache_dir=args.source_cache_dir,
+            max_spans_per_paper=args.max_spans_per_paper,
+            allow_abstract_fallback=args.allow_abstract_fallback,
+            mode=args.mode,
+        )
+    except Exception as exc:
+        print(f"ERROR {exc}", file=sys.stderr)
+        return 1
     print(
         "[survey-v2] evidence "
         f"spans={coverage['evidence_span_count']} cards={coverage['evidence_card_count']} "

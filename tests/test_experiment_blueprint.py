@@ -105,6 +105,8 @@ def test_compile_experiment_plan_writes_claim_driven_blueprint(tmp_path: Path) -
     assert block["metric"]["primary_metric"]
     assert block["stop_condition"]
     assert block["failure_interpretation"]
+    assert block["execution_status"] != "executable"
+    assert block["human_gate_required"] is True
     assert "primary_metric" in blueprint["metric_contract"]
     assert "must_run" in blueprint["baseline_contract"]
     assert "what_approval_enables" in blueprint["human_gate_package"][0]

@@ -21,7 +21,17 @@ MEMORY_FILES = (
 )
 
 
-def write_negative_memory(*, reviews: Path, experiment_plan: Path, memory: Path) -> dict[str, Any]:
+def write_negative_memory(
+    *,
+    reviews: Path,
+    experiment_plan: Path,
+    memory: Path,
+    confirm_write: bool = False,
+) -> dict[str, Any]:
+    if not confirm_write:
+        raise ValueError(
+            "G8 negative memory write gate required: rerun with --confirm-write only after explicit approval."
+        )
     reviews_ctx = _load_reviews(reviews)
     blueprint = _load_blueprint(experiment_plan)
     memory.mkdir(parents=True, exist_ok=True)
@@ -417,9 +427,15 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--reviews", required=True, type=Path)
     parser.add_argument("--experiment-plan", required=True, type=Path)
     parser.add_argument("--memory", required=True, type=Path)
+    parser.add_argument("--confirm-write", action="store_true")
     args = parser.parse_args(argv)
     try:
-        result = write_negative_memory(reviews=args.reviews, experiment_plan=args.experiment_plan, memory=args.memory)
+        result = write_negative_memory(
+            reviews=args.reviews,
+            experiment_plan=args.experiment_plan,
+            memory=args.memory,
+            confirm_write=args.confirm_write,
+        )
     except Exception as exc:
         print(f"ERROR {exc}")
         return 1

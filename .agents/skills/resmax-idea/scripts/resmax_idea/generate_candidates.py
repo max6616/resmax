@@ -147,33 +147,70 @@ def _composite_benchmark_gated_idea(ctx: PackContext, memories: list[dict[str, A
 
     source_gap_ids = _dedupe([gap.get("gap_id", "") for gap in gaps if gap.get("gap_id")])
     source_claim_ids = _dedupe([claim_id for gap in gaps for claim_id in gap.get("supporting_claim_ids", []) if claim_id])
-    evidence_ids = _dedupe([card_id for gap in gaps for card_id in gap.get("evidence_card_ids", []) if card_id])[:16]
+    raw_evidence_ids = _dedupe([card_id for gap in gaps for card_id in gap.get("evidence_card_ids", []) if card_id])
     closest_work_ids = _dedupe([paper_id for gap in gaps for paper_id in ctx.paper_ids_for_gap(gap)])
     closest_work_ids = _relevant_editing_papers(ctx, closest_work_ids)[:12]
-    direct_baselines = _relevant_editing_papers(
+    evidence_ids = [card_id for card_id in raw_evidence_ids if ctx.paper_id_for_card(card_id) in set(closest_work_ids)][:16]
+    direct_fallback = _relevant_editing_papers(
         ctx,
         [paper_id for paper_id in closest_work_ids if "direct_baseline" in ctx.roles_for_paper(paper_id)]
         or ctx.paper_ids_with_role(method_gap, "direct_baseline"),
-    )[:8]
-    method_donors = _relevant_editing_papers(
+    )
+    direct_baselines = _preferred_papers(
         ctx,
-        [paper_id for paper_id in closest_work_ids if "method_donor" in ctx.roles_for_paper(paper_id)]
-        or ctx.paper_ids_with_role(method_gap, "method_donor"),
-    )[:8]
-    benchmark_opportunities = _relevant_editing_papers(
+        [
+            "efficient dynamic scene editing",
+            "dreammotion",
+            "chronoedit",
+            "adapedit",
+            "learning action and reasoning-centric image editing",
+            "splatflow",
+        ],
+        [],
+    ) or direct_fallback
+    direct_baselines = direct_baselines[:8]
+    method_donors = _preferred_papers(
         ctx,
-        [paper_id for paper_id in closest_work_ids if "benchmark_opportunity" in ctx.roles_for_paper(paper_id)]
-        or ctx.paper_ids_with_role(benchmark_gap, "benchmark_opportunity"),
+        [
+            "dynamic-editor",
+            "dynamic-editor:",
+            "dynamic-editor training-free",
+            "instruct 4d-to-4d",
+            "sketchfacegs",
+            "real-time 3d-aware portrait editing",
+            "splatflow",
+        ],
+        _relevant_editing_papers(
+            ctx,
+            [paper_id for paper_id in closest_work_ids if "method_donor" in ctx.roles_for_paper(paper_id)]
+            or ctx.paper_ids_with_role(method_gap, "method_donor"),
+        ),
+    )[:8]
+    benchmark_opportunities = _preferred_papers(
+        ctx,
+        [
+            "egoedit",
+            "chronoedit",
+            "dynamic-editor",
+            "instruct 4d-to-4d",
+            "learning action and reasoning-centric image editing",
+        ],
+        _relevant_editing_papers(
+            ctx,
+            [paper_id for paper_id in closest_work_ids if "benchmark_opportunity" in ctx.roles_for_paper(paper_id)]
+            or ctx.paper_ids_with_role(benchmark_gap, "benchmark_opportunity"),
+        ),
     )[:8]
     roi = _merge_roi_entries([ctx.roi_for_gap(gap_id) for gap_id in source_gap_ids])
+    roi = _scope_roi_to_papers(roi, _dedupe(direct_baselines + benchmark_opportunities + method_donors))
     notes = [note for gap_id in source_gap_ids for note in ctx.reviewer_notes_for_gap(gap_id)]
     reviewer_attack_points = _reviewer_attack_points(notes, roi)
     synthetic_gap = {
         "gap_id": "+".join(source_gap_ids),
-        "gap_type": "benchmark_gated_method",
+        "gap_type": "protocol_locked_action_basis_method",
         "description": (
-            "Combine action-consistent feed-forward 4D Gaussian editing with a mandatory benchmark, dataset, baseline, "
-            "and metric contract before claiming a SIGGRAPH-level method contribution."
+            "Lock a concrete action-edit benchmark contract, then test a feed-forward low-rank action-basis editor over native "
+            "4D Gaussian trajectories instead of relying on unconstrained per-frame diffusion pseudo-pairs."
         ),
         "roi_signals": {
             "unknowns": [item.get("field", "") for item in roi.get("unknowns", []) if isinstance(item, dict)],
@@ -193,18 +230,18 @@ def _composite_benchmark_gated_idea(ctx: PackContext, memories: list[dict[str, A
         "evidence_ids": evidence_ids,
         "closest_work_ids": closest_work_ids,
         "status": status,
-        "variant": "benchmark_gated_method",
+        "variant": "protocol_locked_action_basis_method",
     }
     primary_claim = (
-        f"Under {_constraint_text(ctx)}, a benchmark-gated feed-forward 4D Gaussian action editor can improve action-edit "
-        f"success, temporal/action coherence, and large-change robustness over {_paper_title_list(ctx, direct_baselines, limit=4) or 'the closest 4D editing baselines'} "
-        "only after the benchmark protocol, dataset split, metrics, and baseline reproduction contract are locked."
+        f"Under {_constraint_text(ctx)}, a protocol-locked feed-forward 4D Gaussian action-basis editor can test whether native "
+        "Gaussian trajectory bases improve action-edit success and temporal/multi-view coherence over the reproducible baselines "
+        f"{_paper_title_list(ctx, direct_baselines, limit=8) or 'the closest runnable 4D/video editing baselines'} on a fixed 36-case action-edit suite."
     )
     lineage = {
         "parent_gap_ids": source_gap_ids,
         "parent_idea_ids": [match.get("subject_id", "") for match in duplicate_matches if match.get("subject_id")],
-        "mutation_operator": "merge_method_gap_with_benchmark_protocol_gate",
-        "mutation_reason": "Phase 6 blockers require dataset, metric, and baseline contracts before the method claim is reviewable.",
+        "mutation_operator": "replace_bare_feedforward_with_protocol_locked_action_basis",
+        "mutation_reason": "Phase 6 blockers require a concrete assay and a sharper technical delta than generic feed-forward Gaussian deltas.",
         "status": "proceed" if status == "phase6_ready" else "refine",
     }
     return {
@@ -215,22 +252,30 @@ def _composite_benchmark_gated_idea(ctx: PackContext, memories: list[dict[str, A
         "parent_state_ids": [item for item in [ctx.gap_map.get("state_id"), ctx.roi_lens.get("state_id"), *source_gap_ids] if item],
         "producer": PRODUCER,
         "idea_id": make_state_id("idea", idea_input),
-        "title": "Benchmark-gated feed-forward 4D Gaussian action editing",
+        "title": "Protocol-locked action-basis 4D Gaussian editing",
         "source_gap_ids": source_gap_ids,
         "source_claim_ids": source_claim_ids,
         "evidence_ids": evidence_ids,
         "closest_work_ids": closest_work_ids,
         "generation_sources": _dedupe(["gap_driven", "reviewer_pressure_driven", "benchmark_blindspot_driven", "method_transfer_driven"]),
         "core_delta": (
-            "Do not pitch a bare feed-forward 4DGS editor. The delta is a method whose first deliverable is a reviewer-proof "
-            "action-edit benchmark contract, then a native Gaussian delta predictor tested only against relevant 4D/video/Gaussian editing baselines."
+            "Replace an unconstrained feed-forward Gaussian delta field with a low-rank action basis learned from native 4DGS "
+            "temporal trajectories. The method predicts basis coefficients and masked residuals, so the edit is tied to persistent "
+            "Gaussian motion modes rather than frame-wise diffusion artifacts."
         ),
         "primary_claim": primary_claim,
         "mechanism": (
-            "Stage A locks an action-editing protocol: prompt families, scene/action buckets, small/medium/large magnitude bins, "
-            "dataset split, action-success metric, temporal coherence metric, Gaussian identity-drift metric, and stop conditions. "
-            "Stage B trains a feed-forward Gaussian delta predictor from pseudo-paired action edits produced by video/diffusion editors "
-            "and filtered by multi-view consistency. Stage C applies a temporal identity gate and view-consistency rejection test before reporting any gain."
+            "Stage A freezes a 36-case protocol before training: six scene ids (coffee_martini, cook_spinach, cut_roasted_beef, "
+            "flame_salmon, flame_steak, sear_steak), two action families per scene (pose/contact change and trajectory/magnitude "
+            "change), and small/medium/large magnitude bins. Required metric formulas are fixed: action_success is normalized "
+            "video-text action score against the target prompt, temporal_lpips is mean LPIPS between frame t and optical-flow-warped "
+            "frame t-1, xview_error is mean depth/feature reprojection error across camera pairs, gaussian_identity_drift is median "
+            "canonical per-Gaussian displacement outside the edited action mask divided by scene diagonal, and latency is seconds/edit. "
+            "Stage B extracts a "
+            "low-rank temporal action basis from each source 4DGS by factorizing per-primitive position, scale, rotation, opacity, "
+            "and color trajectories. Stage C trains a feed-forward coefficient head plus sparse residual mask; it does not use "
+            "diffusion-edited frames as supervised targets. Stage D reports reproducible baseline tiers: runnable baselines are "
+            "reproduced, paper-only 2026 systems are used only as stress-test anchors, and promotion is blocked if the protocol audit fails."
         ),
         "why_now": _why_now(roi),
         "direct_baselines": direct_baselines,
@@ -241,18 +286,19 @@ def _composite_benchmark_gated_idea(ctx: PackContext, memories: list[dict[str, A
         "expected_failure_modes": _expected_failure_modes(synthetic_gap, roi, reviewer_attack_points, duplicate_matches),
         "reviewer_attack_points": reviewer_attack_points,
         "strongest_rejection_case": (
-            "Reject if Stage A cannot define a concrete action-edit benchmark protocol and relevant must-run baselines before "
-            "any feed-forward method training begins."
+            "Reject if the 36-case protocol cannot name runnable baselines, scene ids, formulas for all metrics, and stop conditions before "
+            "the action-basis coefficient head is trained."
         ),
         "cheapest_falsification": {
             "claim_to_falsify": primary_claim,
             "minimal_test": (
-                "First complete a two-day baseline/protocol audit for the selected 4D/video/Gaussian editing baselines. Then run "
-                "a 12-action mini-suite with three magnitude bins and report action success, temporal coherence, Gaussian identity drift, and latency."
+                "Day 1 locks the 36-case suite and verifies runnable baselines. Day 2 implements metric scripts: action success, "
+                "warped temporal LPIPS, cross-view reprojection error, Gaussian identity drift, and latency. Days 3-5 train only "
+                "the coefficient head on 4 scenes and compare against the runnable baseline tier."
             ),
             "falsifies_if": (
-                "The audit cannot identify relevant reproducible baselines and metrics, or the method fails to improve action success "
-                "without temporal/action coherence regression."
+                "The audit cannot reproduce at least three relevant baselines, any metric lacks a deterministic script, or the "
+                "action-basis editor fails to improve action success without temporal/multi-view coherence regression."
             ),
             "required_baseline_ids": direct_baselines,
             "expected_cost": _estimate_compute(ctx, roi),
@@ -292,6 +338,33 @@ def _merge_roi_entries(entries: list[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
+def _scope_roi_to_papers(roi: dict[str, Any], paper_ids: list[str]) -> dict[str, Any]:
+    scoped = dict(roi)
+    target = ",".join(paper_ids[:10])
+    unknowns: list[dict[str, Any]] = []
+    for item in roi.get("unknowns", []):
+        if not isinstance(item, dict):
+            continue
+        value = dict(item)
+        field = value.get("field", "unknown")
+        if target:
+            value["follow_up_retrieval_target"] = f"resolve {field} for scoped idea papers: {target}"
+        unknowns.append(value)
+    scoped["unknowns"] = _dedupe_dicts(unknowns, "field")
+    return scoped
+
+
+def _dedupe(values: list[str]) -> list[str]:
+    seen: set[str] = set()
+    out: list[str] = []
+    for value in values:
+        if not value or value in seen:
+            continue
+        seen.add(value)
+        out.append(value)
+    return out
+
+
 def _dedupe_dicts(values: list[dict[str, Any]], key: str) -> list[dict[str, Any]]:
     seen: set[str] = set()
     out: list[dict[str, Any]] = []
@@ -302,6 +375,21 @@ def _dedupe_dicts(values: list[dict[str, Any]], key: str) -> list[dict[str, Any]
         seen.add(token)
         out.append(value)
     return out
+
+
+def _preferred_papers(ctx: PackContext, title_phrases: list[str], fallback: list[str]) -> list[str]:
+    out: list[str] = []
+    all_ids = _dedupe([row.get("paper_id", "") for row in ctx.broad_candidates] + [row.get("paper_id", "") for row in ctx.role_assignments])
+    for phrase in title_phrases:
+        needle = phrase.lower()
+        for paper_id in all_ids:
+            if paper_id in out:
+                continue
+            title = ctx.title_for_paper(paper_id).lower()
+            if needle in title:
+                out.append(paper_id)
+                break
+    return _dedupe(out + fallback)
 
 
 def _relevant_editing_papers(ctx: PackContext, paper_ids: list[str]) -> list[str]:
@@ -711,7 +799,7 @@ def _dimension_value(dimensions: dict[str, Any], name: str) -> str:
 def _paper_title_list(ctx: PackContext, paper_ids: list[str], *, limit: int = 4) -> str:
     titles = [ctx.title_for_paper(paper_id) for paper_id in paper_ids[:limit] if paper_id]
     if len(paper_ids) > limit:
-        titles.append(f"{len(paper_ids) - limit} more")
+        titles.append(f"{len(paper_ids) - limit} additional listed baselines")
     return ", ".join(titles)
 
 

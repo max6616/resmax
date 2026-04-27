@@ -5,6 +5,10 @@ description: Review a Phase 5 idea portfolio with heterogeneous raw reviews, blo
 
 # resmax-review
 
+## Interaction Policy
+
+Production/default execution is interactive. The agent must stop at Human Gates and ask the user before spending reviewer budget, reducing reviewer independence, or promoting a disputed idea. Non-interactive full pipeline execution is allowed only when the user explicitly says test/dev/debug/smoke, and reviewer fallback still needs explicit opt-in flags such as `--allow-same-model-review`.
+
 ## When To Use
 
 Use this skill after `resmax-idea` has produced a validated `ideas/` portfolio from a validated ROI-aware `research_pack/`.
@@ -19,7 +23,9 @@ This skill reviews candidates. It does not generate new ideas, edit `idea_cards.
 - Any fatal blocker with cited evidence kills promotion.
 - Missing raw reviews prevent promotion and route the idea to `human_gate_ideas.jsonl`.
 - Missing closest work prevents promotion and routes the idea to revision unless a stronger fatal blocker kills it.
-- Same-model review fallback is allowed only when `review_independence_confidence` is `low` and `fallback_reason` states that the same model was used.
+- Phase 6 stops at G5 before reviewer execution: ask which reviewer models/roles to use and whether same-model fallback is allowed.
+- Same-model review fallback is allowed only when the user explicitly approves it. If allowed, `review_independence_confidence` must be `low` and `fallback_reason` must state that the same model was used. If not allowed, the raw trace routes to `human_gate`.
+- Phase 6 stops at G6 after aggregation: ask what to do with `promoted`, `revise`, `human_gate`, and `killed` ideas. Disputed ideas must not be auto-promoted to Phase 7.
 - Revision requests are written to new review artifacts. The source `ideas/idea_cards.jsonl` is append-only input and must not be modified by this skill.
 
 ## Commands
@@ -70,7 +76,7 @@ reviewer_pressure
 
 Raw review JSON must conform to the shared `review_trace.schema.json` and include `prompt`, `prompt_hash`, `raw_response`, `blockers`, `recommended_status`, model identity, and independence confidence.
 
-Production reviewer execution is owned by `run-reviewers`. The default provider is `mcp-deepseek`, which calls the project-local `resmax_multimodel` MCP server and writes raw traces to `reviews/raw/<reviewer_role>/<idea_id>.json`. Use `--provider stub` only for deterministic tests; stub output must never be counted as production review.
+Production reviewer execution is owned by `run-reviewers`. The default provider is `mcp-deepseek`, which calls the project-local `resmax_multimodel` MCP server and writes raw traces to `reviews/raw/<reviewer_role>/<idea_id>.json`. Use `--provider stub` only for deterministic tests; stub output must never be counted as production review. Same-model fallback requires `--allow-same-model-review`; without it, same-model traces are preserved but routed to human gate and cannot support promotion.
 
 Reviewer calls run concurrently by default (`--concurrency 5`) so the five role reviews for one idea can execute in parallel when the provider supports parallel API requests. Each concurrent task owns its own MCP stdio client; do not share one stdio client across threads. If a provider call fails after retries, `run-reviewers` writes a schema-valid `human_gate` ReviewTrace with an `external_reviewer_execution_failed` blocker instead of crashing the whole batch.
 

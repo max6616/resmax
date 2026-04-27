@@ -74,6 +74,10 @@ def test_build_pack_generates_cards_claims_gaps_and_missing_reports(tmp_path: Pa
             "--out-dir",
             str(tmp_path),
             "--disable-oa-api",
+            "--mode",
+            "smoke",
+            "--allow-auto-select",
+            "--allow-abstract-fallback",
         ]
     )
     assert result.returncode == 0, result.stdout + result.stderr
@@ -123,6 +127,52 @@ def test_build_pack_generates_cards_claims_gaps_and_missing_reports(tmp_path: Pa
     assert validate.returncode == 0, validate.stdout + validate.stderr
 
 
+def test_build_pack_requires_subdirection_or_auto_select_approval(tmp_path: Path) -> None:
+    result = _run(
+        [
+            sys.executable,
+            "-m",
+            "resmax_survey_v2",
+            "build-pack",
+            "--macro-dir",
+            str(FIXTURE_MACRO),
+            "--out-dir",
+            str(tmp_path),
+        ]
+    )
+    assert result.returncode == 1
+    assert "G1 subdirection selection gate required" in result.stdout + result.stderr
+    gate = json.loads((tmp_path / "research_pack" / "pending_gate_g1.json").read_text(encoding="utf-8"))
+    assert gate["gate_id"] == "G1"
+    assert gate["default_action_if_no_answer"] == "stop"
+
+
+def test_build_pack_requires_evidence_expansion_approval_when_sources_are_missing(tmp_path: Path) -> None:
+    macro = tmp_path / "macro_copy"
+    shutil.copytree(FIXTURE_MACRO, macro)
+    shutil.rmtree(macro / "survey_v2" / "paper_sources" / "p-language-agent", ignore_errors=True)
+    result = _run(
+        [
+            sys.executable,
+            "-m",
+            "resmax_survey_v2",
+            "build-pack",
+            "--macro-dir",
+            str(macro),
+            "--out-dir",
+            str(tmp_path / "out"),
+            "--subdirection-id",
+            "sdir_graph_reasoning",
+            "--disable-oa-api",
+        ]
+    )
+    assert result.returncode == 1
+    assert "G2 evidence expansion gate required" in result.stdout + result.stderr
+    gate = json.loads((tmp_path / "out" / "research_pack" / "pending_gate_g2.json").read_text(encoding="utf-8"))
+    assert gate["gate_id"] == "G2"
+    assert "source_materialization_report.json" in gate["artifact_to_show_before_asking"]
+
+
 def test_select_extract_compile_commands_can_run_separately(tmp_path: Path) -> None:
     select = _run(
         [
@@ -150,6 +200,9 @@ def test_select_extract_compile_commands_can_run_separately(tmp_path: Path) -> N
             str(FIXTURE_MACRO),
             "--out-dir",
             str(tmp_path),
+            "--mode",
+            "smoke",
+            "--allow-abstract-fallback",
         ]
     )
     assert extract.returncode == 0, extract.stdout + extract.stderr
@@ -177,6 +230,10 @@ def test_build_pack_uses_accepted_index_abstract_when_cached_source_is_missing(t
             "--out-dir",
             str(tmp_path / "out"),
             "--disable-oa-api",
+            "--mode",
+            "smoke",
+            "--allow-auto-select",
+            "--allow-abstract-fallback",
         ]
     )
     assert result.returncode == 0, result.stdout + result.stderr

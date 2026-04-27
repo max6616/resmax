@@ -91,7 +91,7 @@ def build_evidence_packages(
             "default_external_review_idea_count": 1,
             "all_ideas_requested": all_ideas,
             "max_ideas": max_ideas,
-            "selection_rule": "phase6_ready_then_experiment_ready_then_evidence_baseline_target_match",
+            "selection_rule": "portfolio_order_from_phase5_limited_by_max_ideas",
         },
         "review_input_policy": _review_input_policy(),
     }
@@ -103,8 +103,7 @@ def select_review_cards(cards: list[dict[str, Any]], *, max_ideas: int = 1, all_
     if all_ideas:
         return list(cards)
     limit = max(1, int(max_ideas or 1))
-    ranked = sorted(cards, key=_review_card_sort_key)
-    return ranked[:limit]
+    return list(cards[:limit])
 
 
 def _review_card_sort_key(card: dict[str, Any]) -> tuple[float, str]:
@@ -127,8 +126,8 @@ def _review_card_sort_key(card: dict[str, Any]) -> tuple[float, str]:
         score += 12.0
     if "feed-forward" in text or "feedforward" in text:
         score += 8.0
-    if "benchmark contract" in text or "benchmark/protocol" in text:
-        score -= 25.0
+    if "benchmark-gated" in text or "benchmark contract" in text or "baseline reproduction contract" in text:
+        score += 30.0
     if "unknown_follow_up_required" in str(card.get("estimated_compute", "")):
         score -= 8.0
     if "high_requires_budget_gate" in str(card.get("estimated_compute", "")):
@@ -218,14 +217,22 @@ def build_package(card: dict[str, Any], idea_ctx: IdeaContext, pack_ctx: Researc
         if isinstance(span_id, str)
     }
     evidence_spans = [row for row in pack_ctx.evidence_spans if row.get("state_id") in span_ids]
-    source_gaps = [row for row in pack_ctx.gap_map.get("gaps", []) if row.get("gap_id") in source_gap_ids]
-    source_claims = [row for row in pack_ctx.claim_graph.get("claims", []) if row.get("claim_id") in source_claim_ids]
+    source_gaps = [_scoped_gap(row, evidence_ids) for row in pack_ctx.gap_map.get("gaps", []) if row.get("gap_id") in source_gap_ids]
+    source_claims = [
+        _scoped_claim(row, evidence_ids)
+        for row in pack_ctx.claim_graph.get("claims", [])
+        if row.get("claim_id") in source_claim_ids and set(row.get("evidence_card_ids", [])) & evidence_ids
+    ]
     reviewer_notes = [row for row in pack_ctx.reviewer_notes if row.get("gap_id") in source_gap_ids]
     role_assignments = [
         row for row in pack_ctx.paper_roles.get("assignments", []) if row.get("paper_id") in closest_work_ids
     ]
     broad_candidates = [row for row in pack_ctx.broad_candidates if row.get("paper_id") in closest_work_ids]
-    roi_entries = [row for row in pack_ctx.roi_lens.get("gap_roi", []) if row.get("gap_id") in source_gap_ids]
+    roi_entries = [
+        _scoped_roi_entry(row, closest_work_ids)
+        for row in pack_ctx.roi_lens.get("gap_roi", [])
+        if row.get("gap_id") in source_gap_ids
+    ]
     package_input = {
         "idea_id": idea_id,
         "idea_hash": input_hash(card),
@@ -256,7 +263,7 @@ def build_package(card: dict[str, Any], idea_ctx: IdeaContext, pack_ctx: Researc
         "idea_card": card,
         "closest_work_check": idea_ctx.closest_checks.get(idea_id, {}),
         "research_spec": pack_ctx.research_spec,
-        "selected_subdirection": pack_ctx.selected_subdirection,
+        "selected_subdirection": _scoped_selected_subdirection(pack_ctx.selected_subdirection, closest_work_ids),
         "source_gaps": source_gaps,
         "source_claims": source_claims,
         "evidence_cards": evidence_cards,
@@ -282,6 +289,49 @@ def _review_input_policy() -> dict[str, Any]:
         ],
         "decision_policy": "blocker_first_not_average_score",
     }
+
+
+def _scoped_gap(row: dict[str, Any], evidence_ids: set[str]) -> dict[str, Any]:
+    gap = dict(row)
+    gap["evidence_card_ids"] = [card_id for card_id in row.get("evidence_card_ids", []) if card_id in evidence_ids]
+    return gap
+
+
+def _scoped_claim(row: dict[str, Any], evidence_ids: set[str]) -> dict[str, Any]:
+    claim = dict(row)
+    claim["evidence_card_ids"] = [card_id for card_id in row.get("evidence_card_ids", []) if card_id in evidence_ids]
+    return claim
+
+
+def _scoped_roi_entry(row: dict[str, Any], paper_ids: set[str]) -> dict[str, Any]:
+    entry = dict(row)
+    target = ",".join(sorted(paper_ids)[:12])
+    unknowns: list[dict[str, Any]] = []
+    for item in row.get("unknowns", []):
+        if not isinstance(item, dict):
+            continue
+        value = dict(item)
+        field = value.get("field", "unknown")
+        if target:
+            value["follow_up_retrieval_target"] = f"resolve {field} for scoped review package papers: {target}"
+        unknowns.append(value)
+    entry["unknowns"] = unknowns
+    return entry
+
+
+def _scoped_selected_subdirection(selected: dict[str, Any], paper_ids: set[str]) -> dict[str, Any]:
+    scoped = dict(selected)
+    if "selected_candidate_ids" in scoped:
+        scoped["selected_candidate_ids"] = [
+            paper_id for paper_id in selected.get("selected_candidate_ids", []) if paper_id in paper_ids
+        ]
+    if "selected_candidates" in scoped:
+        scoped["selected_candidates"] = [
+            row
+            for row in selected.get("selected_candidates", [])
+            if isinstance(row, dict) and row.get("paper_id") in paper_ids
+        ]
+    return scoped
 
 
 def _portable_path(path: Path) -> str:

@@ -35,6 +35,10 @@ def _build_pack(tmp_path: Path) -> Path:
             str(FIXTURE_MACRO),
             "--out-dir",
             str(tmp_path),
+            "--mode",
+            "smoke",
+            "--allow-auto-select",
+            "--allow-abstract-fallback",
         ]
     )
     assert result.returncode == 0, result.stdout + result.stderr
