@@ -283,7 +283,7 @@ verifier prompt 不得暗示希望通过，不得要求 verifier 补跑或修复
 
 每轮标题：
 
-`ROUND <n> - <YYYY-MM-DDTHH-MM-SS> - <TEST_LAYER> - <TEST_TARGET>`
+`ROUND <n> — <YYYY-MM-DDTHH-MM-SS> — <TEST_LAYER> — <TEST_TARGET>`
 
 每轮记录字段：
 
@@ -345,6 +345,16 @@ git diff
 
 当前阶段使用同一 worktree、`.codex/agents` sandbox、git status / diff 审计和 append-only work log。独立 git worktree 可作为 release replay 增强；当前不引入容器化或复杂权限系统。
 
+## Isolation Tradeoffs
+
+当前最小方案是同一 worktree + `.codex/agents` sandbox + git status / diff 审计 + append-only work log + 每轮全新 executor / verifier。
+
+- 只靠角色 prompt 成本最低，但不能单独作为隔离证据；必须配合 Git 审计和 work log。
+- 同一 worktree 与现有仓库兼容，适合第一轮机制收束；缺点是 dirty workspace 会增加审计成本。
+- 独立 git worktree 可用于 release 前 production replay，尤其是当前 worktree 有较多无关改动时；第一轮不强制引入。
+- verifier 当前必须使用 read-only sandbox；executor 只允许写当前 TEST_LAYER 指定的 runtime 输出范围。
+- 只读挂载和容器化暂不纳入第一轮，避免把机制修改扩大成环境工程。
+
 ## Root Cause Taxonomy
 
 使用以下分类：
@@ -397,6 +407,36 @@ verifier 应检查：
 - verifier 是否未修改任何文件。
 - git status / diff 是否集中且可解释。
 - production replay 是否检查用户真正关心的质量，例如 research goal 对齐、evidence 支撑、unknown/blocker 保留、fallback 标记、review independence、baseline/dataset/metric gate。
+
+## Acceptance Criteria
+
+文档验收：
+
+- `DEV_AGENT.md` 清楚定义 Main Developer Agent、skill_executor、skill_verifier、三层测试机制、PASS scope、FINAL_STATUS、work log、root cause taxonomy 和隔离取舍。
+- `.codex/agents/skill_executor.toml` 按 `TEST_LAYER` 执行，允许 clean-room smoke，区分 production replay，并禁止修复、workaround、越界修改和 scope 夸大。
+- `.codex/agents/skill_verifier.toml` 保持 read-only，检查 `TEST_LAYER`、`PASS_SCOPE`、role boundary、work log、Git diff 和 production replay 内容质量。
+- `tests/README.md` 明确现有 pytest / fixture / validator 属于 contract tests，clean-room smoke 和 production replay 由 agent 流程驱动。
+- 真实用户 `SKILL.md` 不写入 Main / executor / verifier 开发流程，除非真实执行语义本身需要澄清。
+
+流程验收：
+
+- 每轮从 `TEST_TARGET`、`TEST_LAYER`、期望 `PASS_SCOPE`、允许修改范围和禁止修改范围开始。
+- clean-room smoke 与 production replay 必须记录 executor prompt/result 和 verifier prompt/result。
+- executor prompt 不泄露 bug 猜测、修复方向或期望失败点；verifier prompt 不暗示希望通过。
+- 失败后由 Main 修改允许范围内文件，修改后必须开启全新 executor / verifier。
+
+边界验收：
+
+- executor 不修改 `.agents/skills/**`、`tests/**`、`DEV_AGENT.md`、`.codex/agents/**`、validator、schema、tracked config 或 work log。
+- verifier 不修改任何文件，不补跑 executor 未完成任务，不修复，不给 workaround。
+- Main 修改集中、可解释，并通过 git status / diff 和 work log 记录。
+
+分层验收：
+
+- contract pass 只能声明 `PASS_CONTRACT_ONLY`。
+- clean-room smoke pass 只能声明 `PASS_SMOKE_ONLY`，不能作为 release pass。
+- production replay pass 必须声明 `PASS_PRODUCTION_REPLAY`，并有真实产物质量证据。
+- production replay 无法执行时，必须记录原因、风险和替代证据，不得宣称 release-ready。
 
 ## Per-Round Output Format
 
