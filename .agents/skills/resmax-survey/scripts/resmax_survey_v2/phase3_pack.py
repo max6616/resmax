@@ -44,18 +44,13 @@ EVIDENCE_TERMS = (
 
 GAP_PROFILES: tuple[dict[str, Any], ...] = (
     {
-        "gap_type": "temporal_action_coherence",
-        "terms": ("temporal", "temporally", "action", "motion", "dynamic", "video", "coherence", "consistent", "consistency", "4d"),
+        "gap_type": "evidence_tension",
+        "terms": ("limitation", "limited", "fails", "failure", "error", "robustness", "generalization", "challenge"),
         "min_cards": 2,
     },
     {
-        "gap_type": "feedforward_native_gaussian_editing",
-        "terms": ("feed-forward", "feedforward", "feed forward", "real-time", "realtime", "gaussian", "3dgs", "splatting", "native", "direct"),
-        "min_cards": 2,
-    },
-    {
-        "gap_type": "large_magnitude_editing",
-        "terms": ("large", "magnitude", "substantial", "significant", "strong", "complex", "drastic", "out-of-distribution", "generalization", "flexible"),
+        "gap_type": "method_transfer",
+        "terms": ("implementation", "code", "open-source", "open source", "pretrained", "weights", "reproduce", "reproducibility"),
         "min_cards": 2,
     },
     {
@@ -428,7 +423,9 @@ def materialize_sources(
             "oa_api_enabled_when_identifiers_exist": not disable_oa_api,
             "title_only_oa_search": not disable_oa_api,
             "general_web_search_required_before_degraded_fallback": True,
-            "min_readable_source_coverage_for_production": 0.95,
+            "coverage_target": "critical_claim_and_asset_evidence",
+            "min_readable_source_coverage_for_production": None,
+            "missing_source_degradation": "record missing source and missing evidence instead of treating metadata as verified content",
         },
         "counts": counts,
         "records": records,
@@ -1070,17 +1067,14 @@ def _roi_signals_for_gap(gap_type: str, base: dict[str, list[str]]) -> dict[str,
         "unknowns": list(base["unknowns"]),
         "reviewer_blockers": list(base["reviewer_blockers"]),
     }
-    if gap_type == "temporal_action_coherence":
-        signals["positive"] = _dedupe([*signals["positive"], "action_temporal_target", "benchmark_mentions"])
-        signals["difficulty"] = _dedupe([*signals["difficulty"], "temporal_consistency_burden"])
-        signals["unknowns"] = _dedupe([item for item in signals["unknowns"] if item != "compute_burden"] + ["action_benchmark_protocol"])
-    elif gap_type == "feedforward_native_gaussian_editing":
-        signals["positive"] = _dedupe([*signals["positive"], "implementation_reuse", "real_time_target"])
-        signals["difficulty"] = _dedupe([*signals["difficulty"], "feedforward_generalization_burden"])
-    elif gap_type == "large_magnitude_editing":
+    if gap_type == "evidence_tension":
         signals["positive"] = _dedupe([*signals["positive"], "novelty_headroom"])
-        signals["difficulty"] = _dedupe([*signals["difficulty"], "large_edit_evaluation_burden"])
-        signals["unknowns"] = _dedupe([*signals["unknowns"], "edit_magnitude_metric"])
+        signals["difficulty"] = _dedupe([*signals["difficulty"], "failure_mode_burden"])
+        signals["unknowns"] = _dedupe([*signals["unknowns"], "failure_case_evidence"])
+    elif gap_type == "method_transfer":
+        signals["positive"] = _dedupe([*signals["positive"], "implementation_reuse"])
+        signals["difficulty"] = _dedupe([*signals["difficulty"], "reproducibility_burden"])
+        signals["unknowns"] = _dedupe([*signals["unknowns"], "code_availability"])
     elif gap_type == "benchmark_protocol_gap":
         signals["positive"] = _dedupe([*signals["positive"], "reviewer_risk_visibility"])
         signals["difficulty"] = _dedupe([*signals["difficulty"], "baseline_burden"])
@@ -1267,30 +1261,12 @@ def _intent_terms(research_spec: dict[str, Any]) -> dict[str, float]:
         str(research_spec.get(key, ""))
         for key in ("raw_intent", "problem_anchor", "research_question", "target_venue")
     ).lower()
-    weighted = {
-        "4dgs": 6.0,
-        "4d": 5.0,
-        "action": 6.0,
-        "temporal": 6.0,
-        "coherence": 4.5,
-        "magnitude": 4.0,
-        "dynamic": 4.0,
-        "motion": 4.0,
-        "video": 3.5,
-        "feed-forward": 5.0,
-        "feedforward": 5.0,
-        "real-time": 4.0,
-        "realtime": 4.0,
-        "gaussian": 2.5,
-        "splatting": 2.5,
-        "editing": 1.0,
-        "siggraph": 1.5,
-    }
+    weighted = {"benchmark": 2.0, "dataset": 2.0, "baseline": 2.0, "metric": 2.0, "efficient": 1.5, "runtime": 1.5}
     terms = {term: weight for term, weight in weighted.items() if term in raw}
     for token in re.split(r"[^a-z0-9+-]+", raw):
         if len(token) >= 4 and token not in {"target", "venue", "compute", "budget", "timeline", "weeks"}:
             terms.setdefault(token, 0.5)
-    return terms or {"editing": 1.0}
+    return terms or {"general": 0.5}
 
 
 def _reader_tags_from_disk_sources(sources: list[dict[str, Any]]) -> list[str]:
@@ -1518,28 +1494,17 @@ def _source_weight(value: str) -> str:
 
 
 def _gap_description(gap_type: str, selected: dict[str, Any]) -> str:
-    if gap_type == "temporal_action_coherence":
-        return (
-            f"Evidence suggests an unresolved gap in {selected['label']}: large action edits must preserve temporal/action "
-            "coherence across the 4D or video-conditioned Gaussian representation instead of only improving per-view quality."
-        )
-    if gap_type == "feedforward_native_gaussian_editing":
-        return (
-            f"Evidence suggests a feed-forward native-Gaussian editing gap inside {selected['label']}: avoid slow per-scene "
-            "optimization while keeping direct 3D/4D Gaussian attribute control."
-        )
-    if gap_type == "large_magnitude_editing":
-        return (
-            f"Evidence suggests a magnitude gap inside {selected['label']}: methods need controlled evaluation of how far "
-            "the action or geometry can change before identity, geometry, or temporal consistency fails."
-        )
+    if gap_type == "evidence_tension":
+        return f"Evidence suggests unresolved limitations or failure cases inside {selected['label']} that need source-backed characterization."
+    if gap_type == "method_transfer":
+        return f"Evidence suggests an implementation or reproducibility gap inside {selected['label']} that may affect reuse."
     if gap_type == "benchmark_protocol_gap":
         return (
             f"Evidence suggests a benchmark/protocol gap inside {selected['label']}: baselines, datasets, metrics, and "
-            "ablation contracts must be explicit before a SIGGRAPH-level claim is credible."
+            "ablation contracts must be explicit before a strong research claim is credible."
         )
     if gap_type == "resource_arbitrage":
-        return f"Evidence suggests a resource or compute-cost angle inside {selected['label']}."
+        return f"Evidence suggests a resource or compute-cost constraint inside {selected['label']}."
     return f"Evidence suggests benchmark leverage or blind-spot structure inside {selected['label']}."
 
 

@@ -6,28 +6,23 @@ from typing import Any
 
 BUCKETS = (
     (
-        "dynamic_action_4d_editing",
-        "Dynamic 4D/action Gaussian editing",
+        "method_architecture",
+        "Method and architecture cluster",
         (
-            "4dgs",
-            "4d",
-            "dynamic",
-            "temporal",
-            "temporally",
-            "action",
-            "motion",
-            "video",
-            "coherence",
-            "real-time",
-            "realtime",
-            "feed-forward",
-            "feedforward",
+            "method",
+            "architecture",
+            "model",
+            "transformer",
+            "diffusion",
+            "optimization",
+            "retrieval",
+            "representation",
         ),
     ),
-    ("graph_reasoning", "Graph reasoning and planning", ("graph", "relation", "planning", "grounding")),
-    ("agentic_tool_use", "Agentic tool use and memory", ("agent", "tool", "memory")),
-    ("generative_editing", "Generative editing and diffusion transfer", ("diffusion", "editing", "gaussian", "splatting", "4dgs")),
-    ("benchmark_evaluation", "Benchmark and evaluation leverage", ("benchmark", "evaluation", "dataset", "control")),
+    ("task_problem", "Task and problem setting cluster", ("task", "problem", "planning", "reasoning", "prediction", "generation", "classification")),
+    ("implementation_reuse", "Implementation and reuse cluster", ("implementation", "code", "open-source", "pretrained", "weights", "reproduce")),
+    ("benchmark_evaluation", "Benchmark and evaluation cluster", ("benchmark", "evaluation", "dataset", "metric", "baseline", "ablation")),
+    ("limitation_risk", "Limitation and risk cluster", ("limitation", "failure", "robustness", "cost", "compute", "runtime")),
 )
 MIN_SUBDIRECTION_PAPERS = 50
 FOUNDATION_LIMIT = 25
@@ -283,9 +278,8 @@ def _is_foundation_candidate(candidate: dict[str, Any]) -> bool:
             "foundational",
             "survey",
             "taxonomy",
-            "gaussian splatting",
-            "neural radiance fields",
-            "nerf",
+            "overview",
+            "benchmark",
         )
     )
 

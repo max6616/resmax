@@ -1,0 +1,1 @@
+{"gap_id":"gap_seed_eval_protocol","text":"Graph planning evaluation lacks direct baselines, F1 metric coverage, and runtime cost reporting.","related_claim_ids":["claim_seed_graph_control"],"confidence":0.45}

@@ -1,0 +1,3 @@
+title,authors,venue,year,url,doi,arxiv_id,openreview_forum_id,notes
+Scene Graph Transformers,Ada Lovelace,CVPR,2025,https://openaccess.thecvf.com/content/CVPR2025/html/Scene_Graph_Transformers_CVPR_2025_paper.html,,2401.00001,forum-scene,"Uses GraphControl benchmark, F1 metric, Transformer base model, direct baseline comparison, and public code signals."
+Unlisted Planning Memory,Example Author,Workshop,2026,https://example.invalid/planning-memory,,,,External-only paper that should not become verified.

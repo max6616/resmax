@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
+import re
 import time
 from pathlib import Path
 from typing import Any
@@ -13,6 +15,18 @@ from .cluster_subdirections import build_roi_rows, build_subdirection_map
 from .plan_queries import load_query_families
 from .query_embedding import QueryEmbeddingProvider
 from .render_macro import write_macro_outputs
+
+
+BOUNDED_RETRIEVAL_MODES = {
+    "seed-list verifier",
+    "local omission checker",
+    "closest-work search",
+    "claim falsifier",
+    "gap falsifier",
+    "infra search",
+    "follow-up query suggester",
+}
+BOUNDED_RETRIEVAL_TOP_K_CAP = 10
 
 
 def retrieve_macro(
@@ -323,8 +337,6 @@ def _candidate_grade(row: dict[str, Any], research_spec: dict[str, Any]) -> dict
     role_count = len([part for part in str(row.get("query_roles", "")).split("|") if part])
     anchor_terms = _anchor_terms(research_spec)
     anchor_hits = sum(1 for term in anchor_terms if term in text)
-    target_terms = ("4dgs", "4d", "gaussian", "splatting", "editing", "edit", "action", "temporal", "real-time", "feed-forward")
-    target_hits = sum(1 for term in target_terms if term in text)
     source_weight_bonus = {
         "primary": 0.8,
         "secondary": 0.4,
@@ -345,7 +357,6 @@ def _candidate_grade(row: dict[str, Any], research_spec: dict[str, Any]) -> dict
         + min(keyword_score, 6.0) * 0.12
         + min(embedding_score, 1.0) * 2.0
         + min(anchor_hits, 8) * 0.22
-        + min(target_hits, 8) * 0.25
         + source_weight_bonus
         + full_text_bonus
         + anchor_bonus
@@ -358,8 +369,8 @@ def _candidate_grade(row: dict[str, Any], research_spec: dict[str, Any]) -> dict
         reasons.append("multi_role_retrieval")
     if embedding_score > 0.55:
         reasons.append("semantic_match")
-    if target_hits >= 3:
-        reasons.append("target_terms")
+    if anchor_hits >= 3:
+        reasons.append("anchor_terms")
     if full_text_bonus:
         reasons.append("source_available")
     if anchor_bonus:
@@ -454,6 +465,85 @@ def _effective_max_candidates(research_spec: dict[str, Any], max_candidates: int
         return max(1, int(max_candidates))
     spec_limit = _to_int(str(research_spec.get("budget_policy", {}).get("macro_max_candidates", "")))
     return max(400, spec_limit, 1)
+
+
+def build_bounded_retrieval_trace(
+    *,
+    target_type: str,
+    target_id: str,
+    purpose: str,
+    query: str,
+    retrieval_mode: str,
+    candidates: list[dict[str, Any]],
+    top_k: int = BOUNDED_RETRIEVAL_TOP_K_CAP,
+) -> dict[str, Any]:
+    """Build the normalizer-style trace shape for bounded falsification retrieval.
+
+    The legacy macro command still performs broad candidate retrieval. This helper
+    documents and enforces the bounded retrieval contract used by the new default
+    normalizer path without turning retrieve_macro into an open-ended discovery
+    engine.
+    """
+
+    if retrieval_mode not in BOUNDED_RETRIEVAL_MODES:
+        raise ValueError(f"unsupported bounded retrieval_mode: {retrieval_mode}")
+    effective_top_k = max(1, min(int(top_k), BOUNDED_RETRIEVAL_TOP_K_CAP))
+    trace_id = _bounded_trace_id(target_type, target_id, purpose, query, retrieval_mode)
+    ranked = []
+    for rank, candidate in enumerate(candidates[:effective_top_k], start=1):
+        ranked.append(
+            {
+                "paper_id": candidate.get("paper_id", ""),
+                "rank": rank,
+                "score": float(candidate.get("score") or 0.0),
+                "ranking_reason": candidate.get("ranking_reason") or _ranking_reason(query, candidate),
+                "drop_reason": candidate.get("drop_reason", ""),
+            }
+        )
+    return {
+        "schema_version": SCHEMA_VERSION,
+        "trace_id": trace_id,
+        "target_type": target_type,
+        "target_id": target_id,
+        "purpose": purpose,
+        "query": query,
+        "retrieval_mode": retrieval_mode,
+        "top_k": effective_top_k,
+        "candidate_list": ranked,
+        "bounded": True,
+    }
+
+
+def _bounded_trace_id(target_type: str, target_id: str, purpose: str, query: str, retrieval_mode: str) -> str:
+    payload = json.dumps(
+        {
+            "target_type": target_type,
+            "target_id": target_id,
+            "purpose": purpose,
+            "query": query,
+            "retrieval_mode": retrieval_mode,
+        },
+        ensure_ascii=False,
+        sort_keys=True,
+    )
+    return "retrieval_trace:" + hashlib.sha256(payload.encode("utf-8")).hexdigest()[:16]
+
+
+def _ranking_reason(query: str, candidate: dict[str, Any]) -> str:
+    query_terms = _generic_terms(query)
+    candidate_text = " ".join(str(candidate.get(key, "")) for key in ("title", "abstract_raw", "keywords_raw"))
+    candidate_terms = set(_generic_terms(candidate_text))
+    overlap = [term for term in query_terms if term in candidate_terms]
+    return "token_overlap:" + ",".join(overlap[:8]) if overlap else "bounded_candidate"
+
+
+def _generic_terms(text: str) -> list[str]:
+    stop = {"the", "and", "for", "with", "from", "into", "that", "this", "paper", "study"}
+    terms = []
+    for token in re.split(r"[^A-Za-z0-9_+-]+", text.lower()):
+        if len(token) >= 3 and token not in stop:
+            terms.append(token)
+    return _dedupe(terms)
 
 
 def _load_json(path: Path) -> dict[str, Any]:

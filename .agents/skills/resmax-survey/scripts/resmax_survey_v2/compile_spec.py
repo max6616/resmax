@@ -285,9 +285,6 @@ def main(argv: list[str] | None = None) -> int:
 
 
 def _problem_anchor(intent: str) -> str:
-    domain_anchor = _domain_anchor(intent)
-    if domain_anchor:
-        return domain_anchor
     words = [
         part
         for part in re.split(r"[^A-Za-z0-9_+-]+", intent.strip())
@@ -296,33 +293,6 @@ def _problem_anchor(intent: str) -> str:
     if not words:
         return intent.strip()
     return " ".join(words[:12])
-
-
-def _domain_anchor(intent: str) -> str:
-    text = intent.lower()
-    terms: list[str] = []
-    if _mentions_4dgs(text):
-        terms.append("4DGS")
-    if _mentions_dynamic_gs(text):
-        terms.append("dynamic Gaussian Splatting")
-    elif _mentions_4dgs(text):
-        terms.append("4D Gaussian Splatting")
-    if _mentions_3dgs(text):
-        terms.append("3DGS")
-    if _mentions_editing(text):
-        terms.append("editing")
-    if _mentions_novel_view_synthesis(text):
-        terms.append("novel view synthesis")
-    if "dynerf" in text:
-        terms.append("DyNeRF")
-    if "n3dv" in text or "neural 3d video" in text:
-        terms.append("N3DV")
-    if any(term in text for term in ("dynamic", "动态", "motion", "video")) or _mentions_4dgs(text):
-        terms.append("dynamic scenes")
-    for prop in _desired_properties(intent):
-        if prop not in {"low compute", "implementation reuse"}:
-            terms.append(prop)
-    return " ".join(_dedupe(terms)[:12])
 
 
 def _build_search_profile(
@@ -355,17 +325,6 @@ def _build_search_profile(
 
 
 def _core_topic(intent: str, problem_anchor: str) -> str:
-    text = intent.lower()
-    if _mentions_4dgs(text) and _mentions_editing(text):
-        return "4DGS editing"
-    if _mentions_4dgs(text) and _mentions_novel_view_synthesis(text):
-        return "4DGS dynamic novel view synthesis"
-    if _mentions_dynamic_gs(text) and _mentions_novel_view_synthesis(text):
-        return "dynamic Gaussian Splatting novel view synthesis"
-    if _mentions_3dgs(text) and _mentions_editing(text):
-        return "3DGS editing"
-    if "gaussian splatting" in text and _mentions_editing(text):
-        return "Gaussian Splatting editing"
     words = [
         part
         for part in re.split(r"[^A-Za-z0-9_+-]+", problem_anchor)
@@ -375,32 +334,12 @@ def _core_topic(intent: str, problem_anchor: str) -> str:
 
 
 def _entities(intent: str, core_topic: str) -> list[str]:
-    text = intent.lower()
     entities: list[str] = [core_topic]
-    if _mentions_4dgs(text):
-        entities.extend(["4D Gaussian Splatting", "4DGS", "3D Gaussian Splatting", "Gaussian Splatting", "dynamic scenes"])
-    elif _mentions_dynamic_gs(text):
-        entities.extend(["dynamic Gaussian Splatting", "Dynamic 3D Gaussian Splatting", "Gaussian Splatting", "dynamic scenes"])
-    elif _mentions_3dgs(text) or "gaussian splatting" in text:
-        entities.extend(["3D Gaussian Splatting", "3DGS", "Gaussian Splatting"])
-    if "gaussian splatting" in text and "Gaussian Splatting" not in entities:
-        entities.append("Gaussian Splatting")
-    if _mentions_dynamic_gs(text):
-        entities.extend(["dynamic Gaussian Splatting", "dynamic scenes"])
-    if _mentions_novel_view_synthesis(text):
-        entities.append("novel view synthesis")
-    if "dynerf" in text:
-        entities.append("DyNeRF")
-    if "n3dv" in text or "neural 3d video" in text:
-        entities.extend(["N3DV", "Neural 3D Video Dataset"])
-    if "nerf" in text:
-        entities.extend(["NeRF", "neural radiance fields"])
-    if _mentions_graph_reasoning(text):
-        entities.extend(["graph reasoning", "scene graph"])
     for match in re.finditer(r"\b(?:[A-Z0-9][A-Z0-9+-]{1,}|[0-9]D[A-Za-z0-9+-]*)\b", intent):
         token = match.group(0)
         if not _is_noisy_entity_token(token):
             entities.append(token)
+    entities.extend(_capitalized_phrases(intent))
     return _dedupe(entities)
 
 
@@ -408,17 +347,12 @@ def _desired_properties(intent: str) -> list[str]:
     text = intent.lower()
     candidates = [
         ("real-time", ("real-time", "realtime", "real time", "实时")),
-        ("feed-forward", ("feed-forward", "feedforward", "feed forward", "前馈")),
-        ("temporal consistency", ("temporal consistency", "temporally consistent", "temporal coherence", "连贯", "一致性", "时序")),
-        ("large motion editing", ("large motion", "motion editing", "动作变化", "变化幅度", "大幅度")),
-        ("action editing accuracy", ("action editing", "motion accuracy", "动作编辑", "动作准确")),
         ("low compute", ("low compute", "low-cost", "cheap", "efficient")),
         ("public datasets", ("public dataset", "public datasets", "open dataset", "公开数据", "公开benchmark", "数据集")),
         ("benchmark leverage", ("benchmark", "evaluation", "dataset", "基准", "评测", "指标", "定量", "数据集")),
         ("qualitative visualization", ("qualitative", "visualization", "visual analysis", "可视化", "定性")),
         ("implementation reuse", ("code", "open source", "pretrained", "weights")),
-        ("novel view synthesis", ("novel view synthesis", "view synthesis", "新视角合成", "新视图合成")),
-        ("dynamic scene rendering", ("dynamic scene rendering", "dynamic view synthesis", "dynamic scenes", "动态gs", "动态高斯")),
+        ("consistency", ("consistent", "consistency", "一致性")),
     ]
     properties = [label for label, variants in candidates if any(variant in text for variant in variants)]
     return _dedupe(properties)
@@ -507,50 +441,6 @@ def _normalize_timeline(value: str) -> str:
     return clean
 
 
-def _mentions_4dgs(text: str) -> bool:
-    return "4dgs" in text or "4d gaussian" in text or "4d gaussian splatting" in text
-
-
-def _mentions_3dgs(text: str) -> bool:
-    return "3dgs" in text or "3d gaussian" in text or "3d gaussian splatting" in text
-
-
-def _mentions_dynamic_gs(text: str) -> bool:
-    return any(
-        term in text
-        for term in (
-            "dynamic gs",
-            "dynamic gaussian",
-            "dynamic 3d gaussian",
-            "dynamic gaussian splatting",
-            "动态gs",
-            "动态高斯",
-        )
-    )
-
-
-def _mentions_novel_view_synthesis(text: str) -> bool:
-    return any(
-        term in text
-        for term in (
-            "novel view synthesis",
-            "new view synthesis",
-            "view synthesis",
-            "新视角合成",
-            "新视图合成",
-            "新视角",
-        )
-    )
-
-
-def _mentions_editing(text: str) -> bool:
-    return any(term in text for term in ("edit", "editing", "编辑", "可编辑"))
-
-
-def _mentions_graph_reasoning(text: str) -> bool:
-    return bool(re.search(r"\b(?:graph|graphs|scene graph|graph reasoning)\b", text, flags=re.I))
-
-
 def _is_anchor_token(token: str) -> bool:
     clean = token.strip()
     lower = clean.lower()
@@ -569,6 +459,15 @@ def _is_noisy_entity_token(token: str) -> bool:
     if re.fullmatch(r"\d+", clean):
         return True
     return False
+
+
+def _capitalized_phrases(text: str) -> list[str]:
+    phrases: list[str] = []
+    for match in re.finditer(r"\b([A-Z][A-Za-z0-9+-]+(?:\s+[A-Z][A-Za-z0-9+-]+){0,3})\b", text):
+        phrase = match.group(1).strip()
+        if not any(_is_noisy_entity_token(part) for part in phrase.split()):
+            phrases.append(phrase)
+    return phrases[:12]
 
 
 def _dedupe(values: list[str]) -> list[str]:

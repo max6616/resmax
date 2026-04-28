@@ -1,181 +1,409 @@
 ---
 name: resmax-survey
-description: 从 resmax 基础文献库构建方向级 survey 与 ResearchPack，包括宏观候选检索、子方向选择、证据抽取和 reviewer-pressure ROI lens。
+description: Normalize external AI/human survey outputs into reproducible, falsifiable, provenance-tracked research assets with bounded local verification.
 ---
 
 # resmax-survey
 
-## 使用边界
+## New Default Positioning
 
-用于文献调研、方向筛选和 ResearchPack 构建。生产输出默认写入 `literature_research/<direction_slug>/`；smoke / clean-room 验证优先写 `/tmp`。
+`resmax-survey` is now a survey normalizer by default. It accepts external AI or human research outputs and converts them into structured assets that are reproducible, verifiable, falsifiable, provenance-tracked, evidence-pointed, explicit about missing evidence, and ready for `resmax-idea`, `resmax-review`, or experiment planning.
 
-生产执行默认交互式：研究约束、子方向选择、source 降级、ROI unknown / reviewer blocker 都必须先问用户。只有用户明确说 test/dev/debug/smoke，才允许配合 opt-in flag 自动跑完整流程。
+External inputs are candidate material, not verified facts. `paper_database/accepted_index.csv` is used as a high-quality accepted-paper whitelist and falsification base. Embedding/keyword retrieval is used as novelty falsifier, closest-work checker, and deterministic sanity checker, not as an open-domain discovery engine.
 
-本 skill 只产出 survey、evidence、gap/ROI artifacts；不生成 idea、final recommendation 或 experiment plan。
+The unique human-facing entrypoint for a normalizer run is:
 
-## 前置检查
-
-- `paper_database/accepted_index.csv` 存在。
-- 生产执行前数据库 validator 必须 `overall=PASS`。
-- 生产检索需要可用 embedding cache；缺失 cache 只允许 smoke 降级。
-- ROI lens 需要真实 review cache；缺失时先恢复 reviews。
-- `.agents/skills/_shared/resmax_core/corpus_api.py` 是只读 data plane，不写回数据库。
-
-```bash
-python3 .agents/skills/resmax-database/scripts/ensure_reviews_available.py \
-  --csv paper_database/accepted_index.csv \
-  --reviews-dir paper_database/reviews \
-  --package-dir paper_database/hf_export/reviews
-
-python3 .agents/skills/resmax-database/scripts/validate_database.py \
-  --csv paper_database/accepted_index.csv \
-  --cache paper_database/embedding_cache/qwen3_8b.npz \
-  --manifest paper_database/manifest.json
+```text
+literature_research/<topic>/survey_report.md
 ```
 
-## 线性流程
+JSON, JSONL, CSV, and `manifest.json` are the factual assets and downstream contract.
 
-先收集 `research goal / target venue / time-compute-team budget / non-goals`。缺失时停止确认，不要用隐含目标做 ROI 优化。
+## Accepted Inputs
+
+Provide one or more of:
+
+```text
+external_report.md
+seed_papers.csv
+seed_papers.jsonl
+seed_papers.md
+seed_claims.jsonl
+seed_gaps.jsonl
+seed_ideas.jsonl
+```
+
+Recommended layout before running:
+
+```text
+survey_inputs/<topic>/
+  external_report.md
+  seed_papers.csv
+  seed_claims.jsonl
+  seed_gaps.jsonl
+  seed_ideas.jsonl
+```
+
+Default command:
+
+```bash
+python3 .agents/skills/resmax-survey/scripts/survey_normalizer.py run-all \
+  --topic <topic> \
+  --input-dir survey_inputs/<topic> \
+  --accepted paper_database/accepted_index.csv \
+  --out-dir literature_research/<topic>
+
+python3 .agents/skills/resmax-survey/scripts/validate_normalized_survey.py validate \
+  --dir literature_research/<topic>
+```
+
+`survey_normalizer.py validate --dir literature_research/<topic>` is also supported.
+
+## Non-Goals
+
+- Do not perform open-domain discovery from scratch.
+- Do not replicate Deep Research, GPT-5.5 Pro, Claude, Gemini, or web-scale literature search.
+- Do not generate final ideas, recommendations, experiment plans, papers, or implementation tasks.
+- Do not add a new database, vector DB, server, dashboard, crawler, queue, knowledge graph engine, or multi-agent orchestration.
+- Do not treat external reports, LLM outputs, or seed files as verified facts.
+- Do not generate multiple competing main Markdown reports.
+- Do not hard-code specific research directions in the generic path.
+- Do not expand scope into `resmax-database`, `resmax-embedding`, `resmax-review`, or `resmax-idea` beyond the minimal contract handoff.
+
+## Normalizer-First Flow
+
+Each stage has a bounded contract:
+
+| Stage | Input | Output | LLM allowed | Local DB / embedding | Source materialization | Failure handling | Degraded mode | Required |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 1. Preflight | external inputs, accepted_index, optional caches | `inputs/input_manifest.json`, initial `manifest.json` fields | No | Existence/hash checks only | No | Stop if no external input; mark missing accepted_index as parse-only | Missing embedding falls back to keyword; missing reviews/sources recorded | Yes |
+| 2. Input normalization | report and seed files | `normalized/*`, `provenance_spans.jsonl`, `parse_errors.jsonl` | Optional extraction only; must mark model extraction | No | No | Bad rows go to `parse_errors.jsonl`; do not silently drop | Empty asset class is skipped | Yes |
+| 3. Paper list audit | normalized seed papers, accepted_index | `audit/paper_audit.csv`, identity map, verified/external-only/uncertain/dropped sets | No by default | accepted_index identity match | No | Ambiguous rows become `uncertain`; duplicates become `dropped` | No accepted_index means no verified local facts | Yes |
+| 4. Retrieval as falsification | claims, gaps, ideas, audit sets | `retrieval/*` traces and candidates | No | accepted_index; embedding optional | No | Every target records trace, ranking reason, drop reason | Keyword fallback if embedding unavailable | Yes |
+| 5. Source materialization for critical evidence | verified/candidate papers needing content facts | `sources/source_manifest.jsonl`, missing source records | No | Source cache status only unless explicitly materialized | Required for content-level facts | Missing source does not stop run; writes missing evidence | Metadata-only identity allowed | Yes |
+| 6. Per-paper secondary asset extraction | accepted metadata, source status, seed notes | `assets/paper_assets.jsonl`, `asset_mentions.jsonl`, `asset_stats.csv` | Optional extractor only, must cite source spans | accepted metadata; source cache optional | Required for verified content fields | Unknown fields stay empty and enter `missing_evidence` | Low confidence metadata extraction allowed | Yes |
+| 7. Claim / gap normalization | seed claims/gaps, evidence, retrieval checks | `claim_graph.json`, `gap_map.jsonl`, falsification summary | Optional classification only | closest-work traces | Required before verified content claim | External claims stay unverified; gaps without closest work blocked | Follow-up query generated | Yes |
+| 8. Report compilation | all structured artifacts | `survey_report.md` | Optional wording only, no new facts | No new retrieval | No | Report must link assets and missing evidence | Report may say evidence unavailable | Yes |
+| 9. Downstream contract generation | assets, gaps, retrieval, missing evidence | `downstream/survey_contract.json`, compat pack | No | No | No | Blocking missing evidence prevents downstream readiness | Legacy compat emitted with explicit warnings | Yes |
+| 10. Validation | full run directory | `validation/validation_report.json/.md` | No | No | No | FAIL blocks downstream use | Warnings allowed; errors must be fixed | Yes |
+
+## Artifact Layout
+
+Default run output:
+
+```text
+literature_research/<topic>/
+  survey_report.md
+  manifest.json
+
+  inputs/
+    input_manifest.json
+    external_report.md
+    seed_papers.csv
+    seed_papers.jsonl
+    seed_papers.md
+    seed_claims.jsonl
+    seed_gaps.jsonl
+    seed_ideas.jsonl
+
+  normalized/
+    normalized_inputs.json
+    provenance_spans.jsonl
+    seed_papers.normalized.jsonl
+    seed_claims.normalized.jsonl
+    seed_gaps.normalized.jsonl
+    seed_ideas.normalized.jsonl
+    parse_errors.jsonl
+
+  audit/
+    paper_audit.csv
+    paper_identity_map.jsonl
+    verified_paper_set.jsonl
+    external_only_papers.jsonl
+    uncertain_papers.jsonl
+    dropped_papers.jsonl
+    audit_summary.json
+
+  retrieval/
+    retrieval_requests.jsonl
+    retrieval_trace.jsonl
+    closest_work_candidates.jsonl
+    falsification_checks.jsonl
+    infra_search_results.jsonl
+    followup_queries.jsonl
+
+  sources/
+    source_manifest.jsonl
+    source_materialization_report.json
+    missing_sources.jsonl
+
+  assets/
+    paper_assets.jsonl
+    asset_mentions.jsonl
+    evidence_cards.jsonl
+    claim_graph.json
+    gap_map.jsonl
+    asset_stats.csv
+    falsification_summary.csv
+    missing_evidence.jsonl
+
+  downstream/
+    survey_contract.json
+    research_pack_compat/
+      manifest.json
+      evidence_cards.jsonl
+      claim_graph.json
+      gap_map.json
+      closest_work_candidates.jsonl
+      missing_evidence.jsonl
+
+  validation/
+    validation_report.json
+    validation_report.md
+```
+
+Rules:
+
+- `survey_report.md` is the only top-level human main report.
+- Structured files are the source of truth.
+- `manifest.json` records inputs, outputs, hashes, cache status, coverage, retrieval modes, provenance summary, degradation summary, validation status, and downstream contract path.
+- Do not add scattered Markdown summaries outside the validation report and input copies.
+
+## Retrieval Modes
+
+Retrieval is bounded. Every request must include `target_type`, `target_id`, `purpose`, `query`, `retrieval_mode`, candidate list, ranking reason, drop reason, and `trace_id`. Per-target top-k must stay capped.
+
+Supported modes:
+
+1. `seed-list verifier`: match seed papers to accepted_index, dedupe, align IDs.
+2. `local omission checker`: find obvious accepted-index papers omitted from the external report or seed set.
+3. `closest-work search`: find nearest accepted papers for a claim, gap, idea, method description, or asset text.
+4. `claim falsifier`: flag claims that may be overstrong, outdated, or contradicted by accepted work.
+5. `gap falsifier`: check whether a gap may already be covered by accepted work.
+6. `infra search`: retrieve and count dataset, benchmark, baseline, metric, base model, codebase, and task mentions.
+7. `follow-up query suggester`: generate bounded queries when local evidence is insufficient.
+
+Required retrieval outputs:
+
+```text
+retrieval/retrieval_requests.jsonl
+retrieval/retrieval_trace.jsonl
+retrieval/closest_work_candidates.jsonl
+retrieval/falsification_checks.jsonl
+retrieval/infra_search_results.jsonl
+retrieval/followup_queries.jsonl
+```
+
+Retrieval must not automatically expand into full-field paper discovery.
+
+## Source Materialization Policy
+
+Metadata is sufficient only for:
+
+- paper existence;
+- title;
+- authors;
+- venue;
+- year;
+- accepted/local whitelist status.
+
+Readable source evidence is required for:
+
+- method contribution;
+- limitation;
+- dataset;
+- benchmark;
+- metric;
+- baseline comparison;
+- experimental protocol;
+- ablation;
+- compute/cost;
+- failure case;
+- reviewer concern.
+
+If PDF, TeX, OpenReview, or other readable source evidence is unavailable:
+
+- do not stop the whole run;
+- write `sources/missing_sources.jsonl`;
+- write `assets/missing_evidence.jsonl`;
+- lower confidence for affected claim/asset/gap;
+- do not mark the content as verified.
+
+Do not mechanically chase a fixed readable-source coverage percentage. Coverage is measured by critical claim evidence, critical asset evidence, closest-work trace coverage, and explicit missing evidence.
+
+## Secondary Asset Schema
+
+`paper_assets.jsonl` must include at least:
+
+```text
+paper_id, canonical_title, audit_status, venue, year, source_status,
+tasks, problem_settings, method_types, base_models, backbones,
+datasets, benchmarks, metrics, baselines, experimental_protocols,
+ablations, compute_cost, data_cost, annotation_cost,
+code_availability, data_availability, claimed_contributions,
+limitations, failure_cases, reviewer_signals, reuse_opportunities,
+implementation_barriers, missing_fields, evidence_card_ids,
+confidence, provenance
+```
+
+`asset_mentions.jsonl` must include:
+
+```text
+mention_id, paper_id, asset_type, normalized_name, surface_form,
+role, evidence_card_id, confidence, source_span, provenance
+```
+
+`evidence_cards.jsonl` must include:
+
+```text
+evidence_id, paper_id, source_id, source_type, locator, quote_hash,
+target_id, target_type, evidence_kind, support_relation,
+content_summary, confidence, extraction_method, provenance
+```
+
+`claim_graph.json` must contain `schema_version`, `claims`, and `edges`. Each claim includes:
+
+```text
+claim_id, text, claim_type, origin, status, paper_ids,
+evidence_ids, counter_evidence_ids, confidence
+```
+
+`gap_map.jsonl`, `closest_work_candidates.jsonl`, `missing_evidence.jsonl`, `asset_stats.csv`, and `manifest.json` follow the schemas enforced by `validate_normalized_survey.py`.
+
+## Report Requirements
+
+`survey_report.md` must include:
+
+1. Executive summary
+2. Input sources and trust boundary
+3. Paper audit summary
+4. Verified / external-only / uncertain / dropped papers
+5. Key paper layers
+6. Infrastructure profile
+7. High-frequency datasets / benchmarks / baselines / metrics / base models
+8. Claim graph summary
+9. Gap map summary
+10. Closest-work / novelty-risk summary
+11. Missing evidence
+12. Low-cost opportunities
+13. Reviewer blocker hints
+14. Downstream handoff boundary for `resmax-idea`
+15. Artifact index with paths and hashes
+
+The report should be dense and navigable. It must link structured files, avoid dumping every row, avoid generating full ideas or experiment plans, and avoid promoting external assumptions to verified conclusions.
+
+## Downstream Contract
+
+The normalizer writes:
+
+```text
+downstream/survey_contract.json
+```
+
+Required fields:
+
+```text
+schema_version, topic, verified_paper_set_path, claim_graph_path,
+gap_map_path, closest_work_candidates_path, paper_assets_path,
+asset_stats_path, evidence_cards_path, missing_evidence_path,
+implementation_constraints, reviewer_blocker_hints, seed_opportunities,
+warnings, provenance_summary, validation_status
+```
+
+Downstream consumers must distinguish:
+
+- verified local metadata;
+- external claims;
+- deterministic/model inference;
+- missing evidence.
+
+Blocking missing evidence prevents `downstream_ready`. A gap without closest-work candidates must not enter review-ready idea generation.
+
+## Validation Policy
+
+Run the validator after every normalizer run:
+
+```bash
+python3 .agents/skills/resmax-survey/scripts/validate_normalized_survey.py validate \
+  --dir literature_research/<topic>
+```
+
+The validator checks:
+
+- artifact existence;
+- schema validity;
+- manifest hashes;
+- input/output provenance;
+- paper audit consistency;
+- retrieval trace coverage;
+- evidence pointer consistency;
+- missing evidence consistency;
+- critical claim coverage;
+- gap falsification status;
+- downstream contract completeness;
+- survey report links;
+- single main report entry;
+- absence of generic direction-specific hard-code in the generic path;
+- absence of unbounded discovery behavior.
+
+Outputs:
+
+```text
+validation/validation_report.json
+validation/validation_report.md
+```
+
+If validation is `FAIL`, do not hand off to `resmax-idea` except as a debugging fixture.
+
+## Legacy / Optional Discovery Path
+
+The old `survey_v2` macro discovery and ResearchPack path is retained as legacy/optional. Use it only when the user explicitly wants local corpus-driven direction discovery, subdirection selection, ResearchPack generation, or ROI-lens artifacts.
+
+Legacy command shape:
 
 ```bash
 PYTHONPATH=.agents/skills/resmax-survey/scripts python3 -m resmax_survey_v2 compile-spec \
-  --intent "研究意图" \
-  --out-dir literature_research/<direction_slug>
-```
+  --intent "research intent" \
+  --out-dir literature_research/<topic>
 
-`compile-spec` 只写 spec 阶段产物：`survey_v2/spec/research_spec.json`、`source_policy.json`、`query_planner_request.json` 和 `query_planner_prompt.md`；不得自动生成 `query_families.jsonl`。执行 skill 的主 agent 必须读取 `query_planner_prompt.md`，调用一个 subagent 只生成 query plan，不允许 subagent 检索。subagent 输出必须保存为 `survey_v2/spec/query_planner_agent_output.json`，再用校验命令包装成最终 `query_families.jsonl`；校验失败必须停止，不得回退到规则 query 或旧 anchor 逻辑。
-
-```bash
 PYTHONPATH=.agents/skills/resmax-survey/scripts python3 -m resmax_survey_v2 plan-queries \
-  --spec literature_research/<direction_slug>/survey_v2/spec/research_spec.json \
-  --agent-output literature_research/<direction_slug>/survey_v2/spec/query_planner_agent_output.json \
-  --out literature_research/<direction_slug>/survey_v2/spec/query_families.jsonl
+  --spec literature_research/<topic>/survey_v2/spec/research_spec.json \
+  --agent-output literature_research/<topic>/survey_v2/spec/query_planner_agent_output.json \
+  --out literature_research/<topic>/survey_v2/spec/query_families.jsonl
 
 PYTHONPATH=.agents/skills/resmax-survey/scripts python3 -m resmax_survey_v2 retrieve-macro \
-  --spec literature_research/<direction_slug>/survey_v2/spec/research_spec.json \
+  --spec literature_research/<topic>/survey_v2/spec/research_spec.json \
   --accepted paper_database/accepted_index.csv \
   --embedding-cache paper_database/embedding_cache/qwen3_8b.npz \
   --embedding-provider ssh \
   --require-embedding \
-  --out-dir literature_research/<direction_slug>
-
-PYTHONPATH=.agents/skills/resmax-survey/scripts python3 -m resmax_survey_v2 validate \
-  --dir literature_research/<direction_slug>
+  --out-dir literature_research/<topic>
 ```
 
-让用户从 `survey_v2/macro/subdirection_map.json` 或 `survey_v2/macro/subdirection_roi_table.csv` 选择 `subdirection_id`。生产默认不自动选择；自动选择只允许 test/dev/debug/smoke 并显式传 `--allow-auto-select`。
+Legacy rules:
 
-```bash
-PYTHONPATH=.agents/skills/resmax-survey/scripts python3 -m resmax_survey_v2 build-pack \
-  --macro-dir literature_research/<direction_slug> \
-  --subdirection-id <chosen_subdirection_id> \
-  --out-dir literature_research/<direction_slug>
+- Legacy Markdown outputs are display-only and must not compete with normalizer `survey_report.md`.
+- Legacy source coverage gates are for ResearchPack runs, not the normalizer default.
+- Legacy ROI lens remains optional and does not generate final ideas.
+- Any old direction-specific fixture must stay in tests/fixtures or an explicit topic profile, not generic code.
 
-PYTHONPATH=.agents/skills/resmax-survey/scripts python3 -m resmax_survey_v2 build-roi-lens \
-  --pack literature_research/<direction_slug>/research_pack \
-  --accepted paper_database/accepted_index.csv \
-  --reviews paper_database/reviews \
-  --out literature_research/<direction_slug>
+## Old Literature-List Path
 
-python3 .agents/skills/_shared/resmax_core/validators/validate_research_pack.py \
-  --pack literature_research/<direction_slug>/research_pack
-```
-
-ROI lens 完成后，让用户审核 high-priority gaps 的 unknown、reviewer blockers 和 follow-up retrieval targets；未确认前不要交给 idea 生成。
-
-## 可拆命令
-
-需要手动拆开 source 准备时：
-
-```bash
-PYTHONPATH=.agents/skills/resmax-survey/scripts python3 -m resmax_survey_v2 select-subdirection \
-  --macro-dir literature_research/<direction_slug> \
-  --subdirection-id <chosen_subdirection_id> \
-  --out-dir literature_research/<direction_slug>
-
-PYTHONPATH=.agents/skills/resmax-survey/scripts python3 -m resmax_survey_v2 materialize-sources \
-  --macro-dir literature_research/<direction_slug> \
-  --out-dir literature_research/<direction_slug>
-```
-
-其他子命令只在需要定位问题时使用：`plan-queries`、`extract-evidence`、`compile-tension`、`extract-reviewer-pressure`、`assign-paper-roles`、`validate-pack`、`validate-roi-pack`。
-
-## 核心产物
-
-- `survey_v2/spec/`: `research_spec.json`, `source_policy.json`
-- `survey_v2/macro/`: query families, retrieval trace, candidates, subdirection map/table, macro report, manifest
-- `research_pack/`: manifest, evidence spans/cards, claim graph, gap map, reviewer pressure notes, paper roles, ROI lens, risk register, seed constraints, missing/source reports
-
-Markdown files are display-only. JSON/JSONL/CSV plus manifest hashes are the downstream contract.
-
-## 硬规则
-
-- 只处理 selected subdirection 的 top candidates；不要对全库做 full-text 解析。
-- 生产 source cache 写入 `paper_database/source_cache/<safe_paper_id>/`；单次调研目录只保存引用、manifest hash 和 reports。
-- Source 解析先复用全局 cache，再尝试官方/OA/arXiv/OpenReview/DOI/PDF/title-only search。若生产 `build-pack` 在 G2 source gate 失败，必须读取 `source_materialization_report.json` 中的 `web_search_replenishment`，对每篇缺失 source 执行合法通用 web search（搜索引擎/浏览器检索官方项目页、publisher open PDF、arXiv/OpenReview、作者主页、机构库、GitHub release 等公开来源），并把可用全文补入全局 source cache。补入 cache 后用下列命令记录公开来源 provenance，再重跑 `build-pack`；只有通用 web search 也无法获得 readable source 时，才停下询问用户是否切换子方向、提供 manual/MinerU cache、显式批准 Sci-Hub，或显式允许 abstract fallback。
-
-```bash
-PYTHONPATH=.agents/skills/resmax-survey/scripts python3 -m resmax_survey_v2 record-source-replenishment \
-  --pack literature_research/<direction_slug>/research_pack \
-  --paper-id <paper_id> \
-  --source-url <legal_public_source_url>
-```
-- Sci-Hub 默认关闭；只有用户显式批准才可启用。
-- 无法 materialize readable source 时，必须写 missing/source reports 和 web search 补源记录；生产运行不得把 OA/title-only resolver 失败等同于已完成通用 web search。
-- `abstract_fallback` 只有显式批准后才能继续，且只能作为 weak/degraded evidence。
-- 生产 ResearchPack 要求 selected candidates readable source coverage 至少 95%，且不能全部来自 abstract fallback。
-- `EvidenceCard` 必须引用 `EvidenceSpan`；`GapMap` 必须引用 claim/evidence，或显式使用 `missing_evidence`。
-- reviewer pressure 优先来自真实 review cache；推断项必须标记 `inferred`。
-- reviewer objection 只进入 gap/ROI lens 和 seed constraints，不直接生成 idea。
-- ROI 保留多维向量、unknowns、blockers 和 confidence；不得用单一总分排序。
-- `unknown` 不当作 0 分；必须降低 confidence 或生成 follow-up retrieval target。
-
-## 旧 literature-list 路径
-
-仅在需要旧 `research_index.csv` / `literature_list.md` 工作流时使用：
+Only use for the old `research_index.csv` / `literature_list.md` workflow:
 
 ```bash
 SKILL_ROOT=.agents/skills/resmax-survey
 
 python3 $SKILL_ROOT/scripts/search_literature.py \
   --accepted paper_database/accepted_index.csv \
-  --direction "研究方向描述" \
-  --keywords "关键词1,关键词2,关键词3" \
-  --out-dir literature_research/<direction_slug>
+  --direction "research direction description" \
+  --keywords "keyword1,keyword2,keyword3" \
+  --out-dir literature_research/<topic>
 
 python3 $SKILL_ROOT/scripts/stage5_5_deepcheck.py \
-  --dir literature_research/<direction_slug> \
+  --dir literature_research/<topic> \
   --accepted paper_database/accepted_index.csv \
   --grades S
 ```
 
-旧路径的评分结果写入 `scores_raw.json` 后，用 `subagent_scorer.apply_scores()` 回写，不手工改 CSV。Sci-Hub fallback 同样默认关闭。
-
-Smoke 降级命令：
-
-```bash
-python3 $SKILL_ROOT/scripts/search_literature.py \
-  --accepted paper_database/accepted_index.csv \
-  --direction smoke_test_scene_graph \
-  --keywords scene,graph \
-  --out-dir /tmp/resmax_survey_smoke \
-  --cache-path /tmp/resmax_missing_embedding_cache_DO_NOT_CREATE.npz \
-  --keyword-top-k 3 \
-  --embedding-top-k 3 \
-  --max-candidates 3
-```
-
-日志必须标记 `Degraded mode`，且不能出现 `## Errors`；生产运行不得使用缺失 cache 降级。
-
-## 失败处理
-
-- validator FAIL：回到 `resmax-database` 或 `resmax-embedding`，不要绕过生产门槛。
-- review JSON 缺失：先运行 `ensure_reviews_available.py`；下载、校验或解压失败时停止。
-- embedding 缺失：生产停止；smoke 可继续关键词路径并标记 degraded。
-- PDF 缺失：优先检查 `pdf_status`、`pdf_source` 和 missing PDF report，不要默认使用灰色来源。
-
-## 参考
-
-- 旧完整手册：`references/legacy_full_manual.md`
-- 评分 prompt/JSON 细节：`scripts/search_literature_lib/subagent_scorer.py`
-- 开源 deepcheck 细节：`scripts/stage5_5_deepcheck.py --help`
+This path is legacy. Do not use it for the default normalizer flow.

@@ -35,8 +35,8 @@ Rules:
 4. Include synonyms and spelling variants.
 5. For each role, generate 2-4 queries.
 6. Each query must have required concept groups and boost phrases.
-7. Each query must be traceable: semantic_text plus generation_reason must contain at least two meaningful terms from raw_intent or search_profile. Prefer core_topic/entities such as 4DGS, 3DGS, Gaussian Splatting, dynamic scenes, editing, real-time, feed-forward, temporal consistency, action editing, public datasets, and benchmark terms when present.
-8. Avoid generic queries like "evaluation metrics for 3D editing" unless the query also carries the user's concrete domain or objective terms.
+7. Each query must be traceable: semantic_text plus generation_reason must contain at least two meaningful terms from raw_intent or search_profile. Prefer core_topic/entities and concrete constraints from the user's own text.
+8. Avoid generic evaluation queries unless the query also carries the user's concrete domain or objective terms.
 9. Output strict JSON matching the schema.
 """
 
@@ -101,7 +101,7 @@ def build_query_planner_request(research_spec: dict[str, Any]) -> dict[str, Any]
                 "Generate 2-4 queries per role.",
                 "Every query must have semantic_text, keyword_query.required_concepts, keyword_query.boost_phrases, and generation_reason.",
                 "Every query must be traceable to raw_intent/search_profile: semantic_text plus generation_reason should include at least two meaningful traceability terms from core_topic, entities, desired_properties, constraints, or raw_intent.",
-                "For broad benchmark/evaluation queries, include the concrete target domain or desired property (for example 4DGS/Gaussian/dynamic scene editing, temporal consistency, action editing accuracy, public benchmarks, qualitative visualization).",
+                "For broad benchmark/evaluation queries, include the concrete target domain or desired property from the user's own raw intent.",
                 "Do not perform retrieval.",
                 "Do not include noisy resource numbers such as GPU count, GPU model, or timeline unless retrieval meaning depends on them.",
             ],
@@ -418,12 +418,6 @@ def _meaningful_terms(text: str) -> list[str]:
 def _expanded_trace_terms(terms: list[str]) -> list[str]:
     expanded: list[str] = []
     term_set = set(terms)
-    if "4dgs" in term_set:
-        expanded.extend(["4d", "gaussian", "splatting"])
-    if "3dgs" in term_set:
-        expanded.extend(["3d", "gaussian", "splatting"])
-    if "feed" in term_set and "forward" in term_set:
-        expanded.append("feed-forward")
     if "real" in term_set and "time" in term_set:
         expanded.append("real-time")
     return expanded
