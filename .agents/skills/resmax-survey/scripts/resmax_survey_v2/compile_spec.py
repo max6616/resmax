@@ -11,6 +11,7 @@ from resmax_core.state import SCHEMA_VERSION, utc_now
 from resmax_core.validators.common import load_json, validate_with_schema
 
 from . import SCHEMA_ROOT
+from .fs_hygiene import remove_known_os_metadata
 from .plan_queries import build_query_planner_request, write_query_planner_request
 
 
@@ -42,15 +43,44 @@ STOPWORDS = {
     "an",
     "and",
     "are",
+    "budget",
+    "compute",
     "for",
     "in",
     "of",
     "on",
     "or",
+    "target",
     "the",
+    "timeline",
     "to",
+    "total",
+    "venue",
+    "week",
+    "weeks",
     "with",
+    "x",
 }
+RESOURCE_OR_METADATA_TOKENS = {
+    "abstract",
+    "benchmark",
+    "codex",
+    "experiment",
+    "fallback",
+    "gpu",
+    "gpus",
+    "hub",
+    "idea",
+    "llm",
+    "lead",
+    "researcher",
+    "researchers",
+    "rtx",
+    "sci",
+    "siggraph",
+    "siggraphasia",
+}
+NOISY_ANCHOR_TOKEN_RE = re.compile(r"^(?:\d+|\d{3,5}|[0-9]+d|[0-9]+\s*(?:x|\*)\s*[0-9]{3,5})$", re.I)
 
 
 def build_research_spec(
@@ -69,7 +99,7 @@ def build_research_spec(
     target_venue = target_venue.strip() or inferred.get("target_venue", "") or "unknown"
     timeline = timeline.strip() or inferred.get("timeline", "") or "unknown"
     compute_budget = compute_budget.strip() or inferred.get("compute_budget", "") or "unknown"
-    team_size = team_size.strip() or "unknown"
+    team_size = team_size.strip() or inferred.get("team_size", "") or "unknown"
 
     unknowns = []
     if target_venue == "unknown":
@@ -194,8 +224,10 @@ def build_source_policy(research_spec: dict[str, Any]) -> dict[str, Any]:
 
 
 def write_spec_pack(out_dir: Path, research_spec: dict[str, Any], source_policy: dict[str, Any]) -> dict[str, Path]:
+    remove_known_os_metadata(out_dir)
     spec_dir = out_dir / "survey_v2" / "spec"
     spec_dir.mkdir(parents=True, exist_ok=True)
+    _remove_stale_query_plan_artifacts(spec_dir)
     research_spec_path = spec_dir / "research_spec.json"
     source_policy_path = spec_dir / "source_policy.json"
     query_planner_request_path = spec_dir / "query_planner_request.json"
@@ -208,12 +240,20 @@ def write_spec_pack(out_dir: Path, research_spec: dict[str, Any], source_policy:
 
     _validate_json(research_spec_path, SCHEMA_ROOT / "research_spec.schema.json")
     _validate_json(source_policy_path, SCHEMA_ROOT / "source_policy.schema.json")
+    remove_known_os_metadata(out_dir)
     return {
         "research_spec": research_spec_path,
         "source_policy": source_policy_path,
         "query_planner_request": query_planner_request_path,
         "query_planner_prompt": query_planner_prompt_path,
     }
+
+
+def _remove_stale_query_plan_artifacts(spec_dir: Path) -> None:
+    for name in ("query_planner_agent_output.json", "query_families.jsonl"):
+        path = spec_dir / name
+        if path.exists():
+            path.unlink()
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -245,14 +285,44 @@ def main(argv: list[str] | None = None) -> int:
 
 
 def _problem_anchor(intent: str) -> str:
+    domain_anchor = _domain_anchor(intent)
+    if domain_anchor:
+        return domain_anchor
     words = [
         part
         for part in re.split(r"[^A-Za-z0-9_+-]+", intent.strip())
-        if part and part.lower() not in STOPWORDS
+        if _is_anchor_token(part)
     ]
     if not words:
         return intent.strip()
     return " ".join(words[:12])
+
+
+def _domain_anchor(intent: str) -> str:
+    text = intent.lower()
+    terms: list[str] = []
+    if _mentions_4dgs(text):
+        terms.append("4DGS")
+    if _mentions_dynamic_gs(text):
+        terms.append("dynamic Gaussian Splatting")
+    elif _mentions_4dgs(text):
+        terms.append("4D Gaussian Splatting")
+    if _mentions_3dgs(text):
+        terms.append("3DGS")
+    if _mentions_editing(text):
+        terms.append("editing")
+    if _mentions_novel_view_synthesis(text):
+        terms.append("novel view synthesis")
+    if "dynerf" in text:
+        terms.append("DyNeRF")
+    if "n3dv" in text or "neural 3d video" in text:
+        terms.append("N3DV")
+    if any(term in text for term in ("dynamic", "动态", "motion", "video")) or _mentions_4dgs(text):
+        terms.append("dynamic scenes")
+    for prop in _desired_properties(intent):
+        if prop not in {"low compute", "implementation reuse"}:
+            terms.append(prop)
+    return " ".join(_dedupe(terms)[:12])
 
 
 def _build_search_profile(
@@ -286,12 +356,20 @@ def _build_search_profile(
 
 def _core_topic(intent: str, problem_anchor: str) -> str:
     text = intent.lower()
-    if ("4dgs" in text or "4d gaussian" in text) and ("edit" in text or "editing" in text):
+    if _mentions_4dgs(text) and _mentions_editing(text):
         return "4DGS editing"
+    if _mentions_4dgs(text) and _mentions_novel_view_synthesis(text):
+        return "4DGS dynamic novel view synthesis"
+    if _mentions_dynamic_gs(text) and _mentions_novel_view_synthesis(text):
+        return "dynamic Gaussian Splatting novel view synthesis"
+    if _mentions_3dgs(text) and _mentions_editing(text):
+        return "3DGS editing"
+    if "gaussian splatting" in text and _mentions_editing(text):
+        return "Gaussian Splatting editing"
     words = [
         part
         for part in re.split(r"[^A-Za-z0-9_+-]+", problem_anchor)
-        if part and part.lower() not in STOPWORDS
+        if _is_anchor_token(part)
     ]
     return " ".join(words[:5]) or problem_anchor
 
@@ -299,30 +377,48 @@ def _core_topic(intent: str, problem_anchor: str) -> str:
 def _entities(intent: str, core_topic: str) -> list[str]:
     text = intent.lower()
     entities: list[str] = [core_topic]
-    if "4dgs" in text or "4d gaussian" in text:
+    if _mentions_4dgs(text):
         entities.extend(["4D Gaussian Splatting", "4DGS", "3D Gaussian Splatting", "Gaussian Splatting", "dynamic scenes"])
+    elif _mentions_dynamic_gs(text):
+        entities.extend(["dynamic Gaussian Splatting", "Dynamic 3D Gaussian Splatting", "Gaussian Splatting", "dynamic scenes"])
+    elif _mentions_3dgs(text) or "gaussian splatting" in text:
+        entities.extend(["3D Gaussian Splatting", "3DGS", "Gaussian Splatting"])
     if "gaussian splatting" in text and "Gaussian Splatting" not in entities:
         entities.append("Gaussian Splatting")
+    if _mentions_dynamic_gs(text):
+        entities.extend(["dynamic Gaussian Splatting", "dynamic scenes"])
+    if _mentions_novel_view_synthesis(text):
+        entities.append("novel view synthesis")
+    if "dynerf" in text:
+        entities.append("DyNeRF")
+    if "n3dv" in text or "neural 3d video" in text:
+        entities.extend(["N3DV", "Neural 3D Video Dataset"])
     if "nerf" in text:
         entities.extend(["NeRF", "neural radiance fields"])
-    if "graph" in text:
+    if _mentions_graph_reasoning(text):
         entities.extend(["graph reasoning", "scene graph"])
     for match in re.finditer(r"\b(?:[A-Z0-9][A-Z0-9+-]{1,}|[0-9]D[A-Za-z0-9+-]*)\b", intent):
-        entities.append(match.group(0))
+        token = match.group(0)
+        if not _is_noisy_entity_token(token):
+            entities.append(token)
     return _dedupe(entities)
 
 
 def _desired_properties(intent: str) -> list[str]:
     text = intent.lower()
     candidates = [
-        ("real-time", ("real-time", "realtime", "real time")),
-        ("feed-forward", ("feed-forward", "feedforward", "feed forward")),
-        ("temporal consistency", ("temporal consistency", "temporally consistent", "temporal coherence")),
-        ("large motion editing", ("large motion", "motion editing")),
+        ("real-time", ("real-time", "realtime", "real time", "实时")),
+        ("feed-forward", ("feed-forward", "feedforward", "feed forward", "前馈")),
+        ("temporal consistency", ("temporal consistency", "temporally consistent", "temporal coherence", "连贯", "一致性", "时序")),
+        ("large motion editing", ("large motion", "motion editing", "动作变化", "变化幅度", "大幅度")),
+        ("action editing accuracy", ("action editing", "motion accuracy", "动作编辑", "动作准确")),
         ("low compute", ("low compute", "low-cost", "cheap", "efficient")),
-        ("public datasets", ("public dataset", "public datasets", "open dataset")),
-        ("benchmark leverage", ("benchmark", "evaluation", "dataset")),
+        ("public datasets", ("public dataset", "public datasets", "open dataset", "公开数据", "公开benchmark", "数据集")),
+        ("benchmark leverage", ("benchmark", "evaluation", "dataset", "基准", "评测", "指标", "定量", "数据集")),
+        ("qualitative visualization", ("qualitative", "visualization", "visual analysis", "可视化", "定性")),
         ("implementation reuse", ("code", "open source", "pretrained", "weights")),
+        ("novel view synthesis", ("novel view synthesis", "view synthesis", "新视角合成", "新视图合成")),
+        ("dynamic scene rendering", ("dynamic scene rendering", "dynamic view synthesis", "dynamic scenes", "动态gs", "动态高斯")),
     ]
     properties = [label for label, variants in candidates if any(variant in text for variant in variants)]
     return _dedupe(properties)
@@ -337,9 +433,35 @@ def _constraint(label: str, value: str) -> str:
 
 def _infer_constraints(intent: str) -> dict[str, str]:
     return {
-        "target_venue": _extract_labeled_value(intent, ("target venue", "venue")),
-        "compute_budget": _extract_labeled_value(intent, ("compute budget", "budget")),
-        "timeline": _extract_labeled_value(intent, ("timeline", "time budget")),
+        "target_venue": _normalize_venue(
+            _extract_labeled_value(intent, ("target venue", "venue"))
+            or _extract_regex(
+                intent,
+                [
+                    r"(?:目标(?:venue|会议|期刊)?|target\s*venue)\s*(?:为|是|:)?\s*(SIGGRAPH(?:\s*Asia)?)",
+                ],
+            )
+        ),
+        "compute_budget": _normalize_compute_budget(
+            _extract_labeled_value(intent, ("compute budget", "budget"))
+            or _extract_regex(
+                intent,
+                [
+                    r"(?:算力(?:预算)?|compute\s*budget|budget)\s*(?:为|是|:)?\s*([0-9]+\s*(?:x|\*)\s*(?:RTX\s*)?[0-9]{3,5})",
+                ],
+            )
+        ),
+        "timeline": _normalize_timeline(
+            _extract_labeled_value(intent, ("timeline", "time budget"))
+            or _extract_regex(
+                intent,
+                [
+                    r"(?:预计时间|总时间|时间预算|timeline|time\s*budget)\s*(?:为|是|:)?\s*([0-9]+\s*(?:周|weeks?|week|w|个月|months?))",
+                ],
+            )
+        ),
+        "team_size": _extract_labeled_value(intent, ("team size",))
+        or _extract_regex(intent, [r"(?:团队规模|团队|team\s*size)\s*(?:为|是|:)?\s*([^.;；。\n]+)"]),
     }
 
 
@@ -350,6 +472,103 @@ def _extract_labeled_value(text: str, labels: tuple[str, ...]) -> str:
         if match:
             return match.group(1).strip()
     return ""
+
+
+def _extract_regex(text: str, patterns: list[str]) -> str:
+    for pattern in patterns:
+        match = re.search(pattern, text, flags=re.I)
+        if match:
+            return match.group(1).strip()
+    return ""
+
+
+def _normalize_venue(value: str) -> str:
+    clean = value.strip()
+    if re.fullmatch(r"siggraph", clean, flags=re.I):
+        return "SIGGRAPH"
+    if re.fullmatch(r"siggraph\s*asia", clean, flags=re.I):
+        return "SIGGRAPH Asia"
+    return clean
+
+
+def _normalize_compute_budget(value: str) -> str:
+    clean = re.sub(r"\s+", " ", value.strip())
+    match = re.fullmatch(r"([0-9]+)\s*(?:x|\*)\s*(?:RTX\s*)?([0-9]{3,5})", clean, flags=re.I)
+    if match:
+        return f"{match.group(1)} x RTX {match.group(2)}"
+    return clean
+
+
+def _normalize_timeline(value: str) -> str:
+    clean = re.sub(r"\s+", " ", value.strip())
+    match = re.fullmatch(r"([0-9]+)\s*(?:周|w)", clean, flags=re.I)
+    if match:
+        return f"{match.group(1)} weeks"
+    return clean
+
+
+def _mentions_4dgs(text: str) -> bool:
+    return "4dgs" in text or "4d gaussian" in text or "4d gaussian splatting" in text
+
+
+def _mentions_3dgs(text: str) -> bool:
+    return "3dgs" in text or "3d gaussian" in text or "3d gaussian splatting" in text
+
+
+def _mentions_dynamic_gs(text: str) -> bool:
+    return any(
+        term in text
+        for term in (
+            "dynamic gs",
+            "dynamic gaussian",
+            "dynamic 3d gaussian",
+            "dynamic gaussian splatting",
+            "动态gs",
+            "动态高斯",
+        )
+    )
+
+
+def _mentions_novel_view_synthesis(text: str) -> bool:
+    return any(
+        term in text
+        for term in (
+            "novel view synthesis",
+            "new view synthesis",
+            "view synthesis",
+            "新视角合成",
+            "新视图合成",
+            "新视角",
+        )
+    )
+
+
+def _mentions_editing(text: str) -> bool:
+    return any(term in text for term in ("edit", "editing", "编辑", "可编辑"))
+
+
+def _mentions_graph_reasoning(text: str) -> bool:
+    return bool(re.search(r"\b(?:graph|graphs|scene graph|graph reasoning)\b", text, flags=re.I))
+
+
+def _is_anchor_token(token: str) -> bool:
+    clean = token.strip()
+    lower = clean.lower()
+    if not clean or lower in STOPWORDS or lower in RESOURCE_OR_METADATA_TOKENS:
+        return False
+    if NOISY_ANCHOR_TOKEN_RE.fullmatch(clean):
+        return False
+    return True
+
+
+def _is_noisy_entity_token(token: str) -> bool:
+    clean = token.strip()
+    lower = clean.lower().replace(" ", "")
+    if not clean or lower in RESOURCE_OR_METADATA_TOKENS:
+        return True
+    if re.fullmatch(r"\d+", clean):
+        return True
+    return False
 
 
 def _dedupe(values: list[str]) -> list[str]:

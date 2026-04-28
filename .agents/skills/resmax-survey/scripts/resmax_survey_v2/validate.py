@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-from resmax_core.validators.common import ValidationError, load_json, validate_with_schema
+from resmax_core.validators.common import load_json, validate_with_schema
 
 from . import SCHEMA_ROOT
 
@@ -67,7 +67,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     try:
         checks = validate_macro_pack(args.dir)
-    except (MacroValidationError, ValidationError, ValueError, OSError, json.JSONDecodeError) as exc:
+    except (MacroValidationError, ValueError, OSError, json.JSONDecodeError) as exc:
         print(f"ERROR {exc}")
         return 1
     for check in checks:
@@ -81,7 +81,6 @@ def _require_file(path: Path) -> Path:
     if path.stat().st_size == 0:
         raise MacroValidationError(f"required artifact is empty: {path}")
     return path
-
 
 def _validate_json(path: Path, schema_path: Path) -> dict[str, Any]:
     payload = load_json(path)

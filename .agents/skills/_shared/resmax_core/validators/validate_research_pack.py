@@ -174,6 +174,10 @@ def _validate_pack_references(pack_dir: Path, manifest: dict[str, Any] | None = 
     claim_graph = _load_optional_json(pack_dir / "claim_graph.json")
     gap_map = _load_optional_json(pack_dir / "gap_map.json")
 
+    if manifest and (pack_dir / "manifest.json").exists():
+        for pending_gate in sorted(pack_dir.glob("pending_gate_*.json")):
+            errors.append(f"stale pending gate artifact exists after manifest creation: {pending_gate.name}")
+
     span_ids = {row.get("state_id") for row in spans if isinstance(row, dict)}
     card_ids = {row.get("state_id") for row in cards if isinstance(row, dict)}
     extracted_span_ids = {row.get("state_id") for row in spans if row.get("extraction_status") == "extracted"}

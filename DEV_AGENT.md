@@ -29,6 +29,9 @@ skill_verifier：负责独立验证执行结果。
 职责：
 - 按当前 skill 执行完整生产级任务。
 - 像真实用户一样使用 skill。
+- 区分真实前置条件和执行中派生产物：只有用户输入、既有数据库、embedding cache、凭据、配置、外部服务可用性、明确要求预先存在的输入文件等才属于前置条件；输出目录、日志目录、manifest、trace、spec、query plan、临时文件、恢复出的 review cache、materialized source cache、打包产物等，只要 skill 或其文档命令声明会创建/恢复/物化，就必须由 executor 按流程执行生成，不得在执行前因其不存在而失败。
+- 对缺失的执行中派生产物，先运行对应的 documented command；只有该命令失败、写入越界、权限不足、产物仍缺失、状态不一致、需要用户决策或违反生产约束时，才停止并报告。
+- 不得添加与 skill 流程无关的额外 preflight，并把预期由后续步骤创建的文件/目录/cache/status 当作 blocker。只读检查可以用于记录状态，但不能替代实际执行步骤。
 - 不修改 skill。
 - 不修复 skill。
 - 不使用未被允许的 workaround。
@@ -37,13 +40,22 @@ skill_verifier：负责独立验证执行结果。
 2. skill_verifier
 
 职责：
-- 独立审计 executor 的执行结果。
-- 检查产物、日志、命令结果和 Git 变更。
-- 判断 executor 的 PASS 是否真实成立。
-- 判断 executor 的 FAIL 是否代表真实问题。
+- 作为 Resmax 项目的只读生产审计者，独立审计 executor 的执行结果。
+- 检查产物、日志、命令结果和 Git 变更，不只检查命令退出码或 schema 是否通过。
+- 枚举 executor 声称完成范围内的实际文件树，区分预期产物、未纳入 manifest 的额外产物、临时文件、已知可忽略系统元数据、未知系统元数据、旧轮次残留和 stale gate/status 文件。
+- 读取关键 JSON / JSONL / CSV / Markdown / manifest / log 的实际内容，核对字段值、行数、状态位、hash、时间、父子引用、覆盖率计数、缺失项计数、fallback 标记、pending/failed/success 语义是否互相一致。
+- 抽查关键自然语言字段和表格文本，确认它们真实对应用户目标与当前项目语境，没有被工具名、资源约束、禁用项、调试词、历史任务或无关方向污染。
+- 审计日志和终端输出中的 warning、error、traceback、permission issue、dependency issue、degraded mode、fallback、partial run、manual patch 和 skipped step；任何未解释信号都不能静默通过。
+- 审计 Git diff / status，确认 executor 没有修改禁止范围，Main 的修改集中且可解释，工作区没有无法解释的污染。
+- 判断 executor 的 PASS 是否真实成立；如果 PASS 与任何 pending gate、失败状态、缺失产物、冲突计数、旧残留或未解释 warning 同时存在，则必须 FAIL。
+- 判断 executor 的 FAIL 是否代表真实问题，并区分 skill bug、工具链问题、环境问题、输入不清、executor 违规或 verifier 自身验证不足。
+- 可以运行只读验证命令、读取文件、计算 hash、统计行数、解析结构化文件、对比跨文件引用；不得修改任何文件。
 - 不修改任何文件。
 - 不继续执行 executor 未完成的任务。
 - 不放宽验收标准。
+- 不把单个 validator PASS、manifest PASS、局部 smoke PASS 或 executor 自述 PASS 当作充分证明。
+- 返回 PASS 时必须列出足以支撑 PASS 的具体证据：检查过的文件/目录、关键数值、关键文本字段、运行过的验证命令、Git 状态和剩余风险。
+- 返回 FAIL 时必须给出第一个 blocker、证据位置、为什么它破坏生产级验收，以及建议 Main Developer Agent 优先检查的方向；不得给 executor 提供修复方案或 workaround。
 
 ## 主流程
 
@@ -234,7 +246,9 @@ git diff
 - executor 没有修改 skill；
 - executor 没有使用未允许的 workaround；
 - verifier 没有修改文件；
+- verifier 已完成全产物树、实际字段值、关键文本、日志和 Git 状态的独立审计；
 - 所有关键产物符合生产级要求；
+- 没有未解释的额外产物、旧轮次残留、stale gate/status 文件、未知或不可忽略系统元数据文件、跨文件计数冲突；
 - Git diff 中所有修改均可解释；
 - work log 完整记录执行、验证和修复过程；
 - 没有未解释的 error、warning、traceback、权限问题、依赖缺失或工具失败。

@@ -81,10 +81,10 @@ def _write_agent_query_output(out_dir: Path, raw_intent: str) -> Path:
                     },
                     {
                         "query_id": f"q_{role}_2",
-                        "semantic_text": f"feed-forward Gaussian editing dynamic scene action coherence {role}",
+                        "semantic_text": f"feed-forward 4DGS editing Gaussian dynamic scene action coherence {role}",
                         "keyword_query": {
                             "required_concepts": [["feed-forward", "feedforward", "one-shot"], ["Gaussian editing", "3DGS editing", "4DGS editing"]],
-                            "boost_phrases": ["feed-forward Gaussian editing", "action coherence"],
+                            "boost_phrases": ["feed-forward 4DGS editing", "action coherence"],
                             "optional_terms": ["implementation", "evaluation", "visual quality"],
                         },
                         "query_type": "semantic_and_keyword",
@@ -220,6 +220,296 @@ def test_4dgs_editing_siggraph_4w_query_plan_is_structured(tmp_path: Path) -> No
             assert query["keyword_query"]["required_concepts"]
             assert query["keyword_query"]["boost_phrases"]
             assert spec["raw_intent"] in query["generation_reason"]
+
+
+def test_chinese_4dgs_siggraph_intent_builds_clean_search_profile(tmp_path: Path) -> None:
+    out_dir = tmp_path / "macro"
+    intent = (
+        "目标方向为4DGS编辑，尤其是实时编辑、前馈式高斯编辑等领域，"
+        "期望能够在动作编辑准确性、连贯性以及能够实现的动作变化幅度等方面上实现突破。"
+        "关注3DGS等相关领域上的可迁移技术。目标siggraph，算力4*5090，预计时间4周。"
+        "不能自建数据，仅使用公开数据集和公开benchmark。"
+        "可视化定性分析上的提升和定量指标的提升一样有意义。"
+    )
+    result = _run(
+        [
+            sys.executable,
+            "-m",
+            "resmax_survey_v2",
+            "compile-spec",
+            "--intent",
+            intent,
+            "--out-dir",
+            str(out_dir),
+        ]
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+
+    spec_path = out_dir / "survey_v2" / "spec" / "research_spec.json"
+    request_path = out_dir / "survey_v2" / "spec" / "query_planner_request.json"
+    prompt_path = out_dir / "survey_v2" / "spec" / "query_planner_prompt.md"
+    spec = json.loads(spec_path.read_text(encoding="utf-8"))
+    profile = spec["search_profile"]
+
+    assert spec["target_venue"] == "SIGGRAPH"
+    assert spec["compute_budget"] == "4 x RTX 5090"
+    assert spec["timeline"] == "4 weeks"
+    assert spec["team_size"] == "unknown"
+    assert "team_size" in spec["unknowns"]
+    assert "4DGS" in spec["problem_anchor"]
+    assert "editing" in spec["problem_anchor"]
+    assert "SIGGRAPH" not in spec["problem_anchor"]
+    assert "Sci" not in spec["problem_anchor"]
+    assert "abstract" not in spec["problem_anchor"]
+    assert "idea" not in spec["problem_anchor"]
+    assert spec["scope"]["included_topics"] == [spec["problem_anchor"]]
+    assert profile["core_topic"] == "4DGS editing"
+    assert "4D Gaussian Splatting" in profile["entities"]
+    assert "3D Gaussian Splatting" in profile["entities"]
+    assert "graph reasoning" not in profile["entities"]
+    assert "scene graph" not in profile["entities"]
+    assert "real-time" in profile["desired_properties"]
+    assert "feed-forward" in profile["desired_properties"]
+    assert "temporal consistency" in profile["desired_properties"]
+    assert "large motion editing" in profile["desired_properties"]
+    assert "action editing accuracy" in profile["desired_properties"]
+    assert "public datasets" in profile["desired_properties"]
+    assert "benchmark leverage" in profile["desired_properties"]
+    assert "qualitative visualization" in profile["desired_properties"]
+    assert any("SIGGRAPH" in item for item in profile["constraints"])
+
+    request = json.loads(request_path.read_text(encoding="utf-8"))
+    assert request["traceability_terms"]["core_topic"] == "4DGS editing"
+    prompt = prompt_path.read_text(encoding="utf-8")
+    assert "Each query must be traceable" in prompt
+
+
+def test_chinese_dynamic_4dgs_nvs_intent_builds_domain_anchor(tmp_path: Path) -> None:
+    out_dir = tmp_path / "macro"
+    intent = "领域：4DGS、动态GS、DyNeRF/N3DV数据集、新视角合成。目标siggraph，算力4*5090，预计时间4周。"
+    result = _run(
+        [
+            sys.executable,
+            "-m",
+            "resmax_survey_v2",
+            "compile-spec",
+            "--intent",
+            intent,
+            "--out-dir",
+            str(out_dir),
+        ]
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+
+    spec = json.loads((out_dir / "survey_v2" / "spec" / "research_spec.json").read_text(encoding="utf-8"))
+    profile = spec["search_profile"]
+
+    assert spec["target_venue"] == "SIGGRAPH"
+    assert spec["compute_budget"] == "4 x RTX 5090"
+    assert spec["timeline"] == "4 weeks"
+    assert profile["core_topic"] == "4DGS dynamic novel view synthesis"
+    assert "dynamic Gaussian Splatting" in profile["entities"]
+    assert "DyNeRF" in profile["entities"]
+    assert "N3DV" in profile["entities"]
+    assert "novel view synthesis" in profile["entities"]
+    assert "public datasets" in profile["desired_properties"]
+    assert "benchmark leverage" in profile["desired_properties"]
+    assert "novel view synthesis" in profile["desired_properties"]
+    assert "dynamic scene rendering" in profile["desired_properties"]
+    assert "SIGGRAPH" not in spec["problem_anchor"]
+    assert "5090" not in spec["problem_anchor"]
+    assert "4DGS" in spec["problem_anchor"]
+    assert "DyNeRF" in spec["problem_anchor"]
+    assert "N3DV" in spec["problem_anchor"]
+    assert "novel view synthesis" in spec["problem_anchor"]
+
+
+def test_query_traceability_uses_profile_desired_properties(tmp_path: Path) -> None:
+    out_dir = tmp_path / "macro"
+    intent = (
+        "目标方向为4DGS编辑，尤其是实时编辑、前馈式高斯编辑等领域，"
+        "期望能够在动作编辑准确性、连贯性以及能够实现的动作变化幅度等方面上实现突破。"
+        "关注3DGS等相关领域上的可迁移技术。目标siggraph，算力4*5090，预计时间4周。"
+        "不能自建数据，仅使用公开数据集和公开benchmark。"
+        "可视化定性分析上的提升和定量指标的提升一样有意义。"
+    )
+    result = _run(
+        [
+            sys.executable,
+            "-m",
+            "resmax_survey_v2",
+            "compile-spec",
+            "--intent",
+            intent,
+            "--out-dir",
+            str(out_dir),
+        ]
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+
+    spec = json.loads((out_dir / "survey_v2" / "spec" / "research_spec.json").read_text(encoding="utf-8"))
+    agent_output = _write_agent_query_output(out_dir, spec["raw_intent"])
+    payload = json.loads(agent_output.read_text(encoding="utf-8"))
+    for family in payload["query_families"]:
+        if family["family_role"] == "benchmark_opportunity":
+            family["queries"][1] = {
+                "query_id": "q_benchmark_opportunity_2",
+                "query_type": "semantic_and_keyword",
+                "semantic_text": (
+                    "evaluation metrics for 3D or 4D scene editing, action editing accuracy, "
+                    "temporal consistency, motion magnitude, and qualitative visual assessment"
+                ),
+                "keyword_query": {
+                    "required_concepts": [
+                        ["evaluation", "metric", "benchmark"],
+                        ["editing", "motion editing", "action editing"],
+                        ["temporal consistency", "motion accuracy", "visual quality"],
+                    ],
+                    "boost_phrases": ["editing evaluation", "temporal consistency metric", "motion accuracy"],
+                    "optional_terms": ["LPIPS", "FID", "CLIP", "user study", "perceptual"],
+                },
+                "generation_reason": "The user values qualitative visualization and quantitative improvements equally.",
+            }
+    agent_output.write_text(json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+    plan_result = _run(
+        [
+            sys.executable,
+            "-m",
+            "resmax_survey_v2",
+            "plan-queries",
+            "--spec",
+            str(out_dir / "survey_v2" / "spec" / "research_spec.json"),
+            "--agent-output",
+            str(agent_output),
+            "--out",
+            str(out_dir / "survey_v2" / "spec" / "query_families.jsonl"),
+        ]
+    )
+    assert plan_result.returncode == 0, plan_result.stdout + plan_result.stderr
+
+
+def test_spec_and_macro_writers_remove_os_metadata(tmp_path: Path) -> None:
+    out_dir = tmp_path / "macro"
+    (out_dir / "survey_v2").mkdir(parents=True)
+    (out_dir / ".DS_Store").write_bytes(b"metadata")
+    (out_dir / "survey_v2" / ".DS_Store").write_bytes(b"metadata")
+
+    compile_result = _run(
+        [
+            sys.executable,
+            "-m",
+            "resmax_survey_v2",
+            "compile-spec",
+            "--intent",
+            "4DGS editing with low compute budget",
+            "--out-dir",
+            str(out_dir),
+        ]
+    )
+    assert compile_result.returncode == 0, compile_result.stdout + compile_result.stderr
+    assert not list(out_dir.rglob(".DS_Store"))
+
+    _plan_queries_from_agent_output(out_dir, "4DGS editing with low compute budget")
+    (out_dir / ".DS_Store").write_bytes(b"metadata")
+    (out_dir / "survey_v2" / ".DS_Store").write_bytes(b"metadata")
+    cache_path = _write_fixture_embedding_cache(tmp_path)
+    retrieve_result = _run(
+        [
+            sys.executable,
+            "-m",
+            "resmax_survey_v2",
+            "retrieve-macro",
+            "--spec",
+            str(out_dir / "survey_v2" / "spec" / "research_spec.json"),
+            "--accepted",
+            str(ACCEPTED),
+            "--embedding-cache",
+            str(cache_path),
+            "--embedding-provider",
+            "hash",
+            "--out-dir",
+            str(out_dir),
+            "--max-candidates",
+            "20",
+        ]
+    )
+    assert retrieve_result.returncode == 0, retrieve_result.stdout + retrieve_result.stderr
+    assert not list(out_dir.rglob(".DS_Store"))
+
+    validate_result = _run([sys.executable, "-m", "resmax_survey_v2", "validate", "--dir", str(out_dir)])
+    assert validate_result.returncode == 0, validate_result.stdout + validate_result.stderr
+
+
+def test_validate_ignores_os_metadata(tmp_path: Path) -> None:
+    out_dir = tmp_path / "macro"
+    cache_path = _write_fixture_embedding_cache(tmp_path)
+    compile_result = _run(
+        [
+            sys.executable,
+            "-m",
+            "resmax_survey_v2",
+            "compile-spec",
+            "--intent",
+            "4DGS editing with low compute budget",
+            "--out-dir",
+            str(out_dir),
+        ]
+    )
+    assert compile_result.returncode == 0, compile_result.stdout + compile_result.stderr
+    _plan_queries_from_agent_output(out_dir, "4DGS editing with low compute budget")
+    retrieve_result = _run(
+        [
+            sys.executable,
+            "-m",
+            "resmax_survey_v2",
+            "retrieve-macro",
+            "--spec",
+            str(out_dir / "survey_v2" / "spec" / "research_spec.json"),
+            "--accepted",
+            str(ACCEPTED),
+            "--embedding-cache",
+            str(cache_path),
+            "--embedding-provider",
+            "hash",
+            "--out-dir",
+            str(out_dir),
+            "--max-candidates",
+            "20",
+        ]
+    )
+    assert retrieve_result.returncode == 0, retrieve_result.stdout + retrieve_result.stderr
+    (out_dir / ".DS_Store").write_bytes(b"metadata")
+    (out_dir / "survey_v2" / ".DS_Store").write_bytes(b"metadata")
+
+    validate_result = _run([sys.executable, "-m", "resmax_survey_v2", "validate", "--dir", str(out_dir)])
+    assert validate_result.returncode == 0, validate_result.stdout + validate_result.stderr
+
+
+def test_compile_spec_removes_stale_query_plan_artifacts(tmp_path: Path) -> None:
+    out_dir = tmp_path / "macro"
+    spec_dir = out_dir / "survey_v2" / "spec"
+    spec_dir.mkdir(parents=True)
+    (spec_dir / "query_planner_agent_output.json").write_text('{"stale": true}\n', encoding="utf-8")
+    (spec_dir / "query_families.jsonl").write_text('{"stale": true}\n', encoding="utf-8")
+
+    compile_result = _run(
+        [
+            sys.executable,
+            "-m",
+            "resmax_survey_v2",
+            "compile-spec",
+            "--intent",
+            "4DGS editing with low compute budget",
+            "--out-dir",
+            str(out_dir),
+        ]
+    )
+    assert compile_result.returncode == 0, compile_result.stdout + compile_result.stderr
+    assert not (spec_dir / "query_planner_agent_output.json").exists()
+    assert not (spec_dir / "query_families.jsonl").exists()
+    assert (spec_dir / "query_planner_request.json").exists()
+    assert (spec_dir / "query_planner_prompt.md").exists()
 
 
 def test_retrieve_macro_generates_trace_and_low_confidence_roi(tmp_path: Path) -> None:

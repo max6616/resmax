@@ -11,6 +11,7 @@ from typing import Any
 from resmax_core.ids import input_hash, make_state_id, stable_hash
 from resmax_core.state import SCHEMA_VERSION, utc_now
 
+from .fs_hygiene import remove_known_os_metadata
 from search_literature_lib.paper_source_fetch import derive_pdf_candidates, fetch_and_cache_source
 
 
@@ -98,6 +99,7 @@ def select_subdirection(
     macro_root = resolve_macro_root(macro_dir)
     pack_dir = resolve_pack_dir(out_dir)
     pack_dir.mkdir(parents=True, exist_ok=True)
+    remove_known_os_metadata(pack_dir)
 
     research_spec = _load_json(macro_root / "survey_v2" / "spec" / "research_spec.json")
     subdirection_map = _load_json(macro_root / "survey_v2" / "macro" / "subdirection_map.json")
@@ -143,6 +145,7 @@ def select_subdirection(
         selection_method = "auto_intent_roi_match"
     if selected_id not in entries:
         raise ValueError(f"subdirection_id not found in subdirection_map: {selected_id}")
+    _clear_pending_gate(pack_dir, "G1")
 
     candidate_limit = _candidate_limit(research_spec, max_candidates)
     selected_candidates = [row for row in candidates if row.get("subdirection_id") == selected_id]
@@ -197,6 +200,7 @@ def select_subdirection(
         "research_spec_id": research_spec.get("state_id", ""),
     }
     _write_json(pack_dir / "selected_subdirection.json", payload)
+    remove_known_os_metadata(pack_dir)
     return payload
 
 
@@ -381,6 +385,7 @@ def materialize_sources(
             "github_urls": desc.get("github_urls", []),
             "project_page_urls": desc.get("project_page_urls", []),
             "errors": desc.get("errors", {}),
+            "diagnostics": desc.get("diagnostics", {}),
             "readable_source_ok": bool(reader_tags),
             "pdf_text_ok": "pdf" in desc.get("sources_present", []),
             "sci_hub_enabled": enable_sci_hub,
@@ -493,6 +498,7 @@ def build_pack(
     macro_root = resolve_macro_root(macro_dir)
     pack_dir = resolve_pack_dir(out_dir)
     pack_dir.mkdir(parents=True, exist_ok=True)
+    remove_known_os_metadata(pack_dir)
     _copy_macro_artifacts(macro_root, pack_dir)
     selected = select_subdirection(
         macro_dir=macro_root,
@@ -502,6 +508,7 @@ def build_pack(
         allow_auto_select=allow_auto_select,
         mode=mode,
     )
+    _prune_source_replenishment_log(pack_dir, set(selected.get("selected_candidate_ids", [])))
     materialization: dict[str, Any] = {}
     if not skip_source_materialization:
         materialization = materialize_sources(
@@ -546,6 +553,7 @@ def build_pack(
                 "sources, replenish the source cache, or explicitly pass --allow-abstract-fallback "
                 "for degraded evidence."
             )
+        _clear_pending_gate(pack_dir, "G2")
     coverage = extract_evidence(
         macro_dir=macro_root,
         out_dir=pack_dir,
@@ -583,10 +591,12 @@ def build_pack(
             f"abstract_fallback_count={coverage.get('abstract_fallback_count', 0)}. "
             "Pass --allow-abstract-fallback only after explicit approval to continue with degraded evidence."
         )
+    _clear_pending_gate(pack_dir, "G2")
     tension = compile_tension(out_dir=pack_dir)
     _write_coverage_report(pack_dir, selected, coverage)
     _write_field_map(pack_dir)
     manifest = _write_manifest(pack_dir, selected, coverage, tension["gap_map"], materialization)
+    remove_known_os_metadata(pack_dir)
     return {"pack_dir": str(pack_dir), "manifest": manifest, "coverage": coverage, "materialization": materialization}
 
 
@@ -645,6 +655,38 @@ def _write_pending_gate(
     _write_json(pack_dir / f"pending_gate_{gate_id.lower()}.json", payload)
 
 
+def _clear_pending_gate(pack_dir: Path, gate_id: str) -> None:
+    path = pack_dir / f"pending_gate_{gate_id.lower()}.json"
+    if path.exists():
+        path.unlink()
+
+
+def _prune_source_replenishment_log(pack_dir: Path, selected_candidate_ids: set[str]) -> None:
+    path = pack_dir / "source_replenishment_log.json"
+    if not path.exists():
+        return
+    payload = _load_json(path)
+    records = payload.get("records", []) if isinstance(payload, dict) else []
+    if not isinstance(records, list):
+        return
+    selected = {str(paper_id) for paper_id in selected_candidate_ids if str(paper_id)}
+    filtered = [record for record in records if isinstance(record, dict) and record.get("paper_id") in selected]
+    if len(filtered) == len(records):
+        return
+    if not filtered:
+        path.unlink()
+        return
+    log_input = {"records": filtered}
+    payload["records"] = filtered
+    payload["record_count"] = len(filtered)
+    payload["created_at"] = utc_now()
+    payload["input_hash"] = input_hash(log_input)
+    payload["state_id"] = make_state_id("source_replenishment_log", log_input)
+    payload.setdefault("schema_version", SCHEMA_VERSION)
+    payload.setdefault("producer", PRODUCER)
+    _write_json(path, payload)
+
+
 def _write_manifest(
     pack_dir: Path,
     selected: dict[str, Any],
@@ -671,6 +713,8 @@ def _write_manifest(
     ]
     if (pack_dir / "source_materialization_report.json").exists():
         artifacts.append(_artifact(pack_dir, "source_materialization_report", "source_materialization_report.json"))
+    if (pack_dir / "source_replenishment_log.json").exists():
+        artifacts.append(_artifact(pack_dir, "source_replenishment_log", "source_replenishment_log.json"))
     manifest_input = {
         "research_spec_id": research_spec["state_id"],
         "selected_subdirection_id": selected["selected_subdirection_id"],
@@ -1544,14 +1588,23 @@ def _read_jsonl(path: Path) -> list[dict[str, Any]]:
 
 def _write_json(path: Path, payload: Any) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    path.write_text(
+        json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True, default=_json_default) + "\n",
+        encoding="utf-8",
+    )
 
 
 def _write_jsonl(path: Path, rows: list[dict[str, Any]]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", encoding="utf-8") as f:
         for row in rows:
-            f.write(json.dumps(row, ensure_ascii=False, sort_keys=True) + "\n")
+            f.write(json.dumps(row, ensure_ascii=False, sort_keys=True, default=_json_default) + "\n")
+
+
+def _json_default(value: Any) -> str:
+    if isinstance(value, Path):
+        return str(value)
+    raise TypeError(f"Object of type {type(value).__name__} is not JSON serializable")
 
 
 def _sha256_file(path: Path) -> str:

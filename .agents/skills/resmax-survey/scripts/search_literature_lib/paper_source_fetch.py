@@ -275,22 +275,90 @@ def fetch_pdf(
         text = txt_path.read_text(encoding="utf-8", errors="ignore")
     else:
         try:
-            with pymupdf.open(pdf_path) as doc:
-                pages = [page.get_text("text") for page in doc]
-            text = "\n\n".join(pages)
+            text, diagnostics = _extract_pdf_text_layer(pdf_path)
         except Exception as e:
             return {"ok": False, "pdf_path": pdf_path, "pdftxt_path": None,
                     "text_chars": 0, "source_url": source_url, "attempts": attempts,
                     "error": f"pymupdf parse failed: {e}"}
+        unknown_diagnostics = diagnostics.get("unknown", [])
+        if unknown_diagnostics:
+            return {"ok": False, "pdf_path": pdf_path, "pdftxt_path": None,
+                    "text_chars": 0, "source_url": source_url, "attempts": attempts,
+                    "error": "pymupdf emitted unclassified diagnostics: " + "; ".join(unknown_diagnostics[:3])}
         if not text.strip():
             return {"ok": False, "pdf_path": pdf_path, "pdftxt_path": None,
                     "text_chars": 0, "source_url": source_url, "attempts": attempts,
                     "error": "pdf has no text layer (image-only?)"}
         txt_path.write_text(text, encoding="utf-8")
 
-    return {"ok": True, "pdf_path": pdf_path, "pdftxt_path": txt_path,
-            "text_chars": len(text), "source_url": source_url,
-            "attempts": attempts, "error": ""}
+    result = {"ok": True, "pdf_path": pdf_path, "pdftxt_path": txt_path,
+              "text_chars": len(text), "source_url": source_url,
+              "attempts": attempts, "error": ""}
+    if "diagnostics" in locals() and diagnostics.get("known_nonfatal"):
+        result["diagnostics"] = {"pymupdf_known_nonfatal": diagnostics["known_nonfatal"]}
+    return result
+
+
+def _extract_pdf_text_layer(pdf_path: Path) -> tuple[str, dict[str, list[str]]]:
+    tools = getattr(pymupdf, "TOOLS", None)
+    old_display_errors = None
+    old_display_warnings = None
+    if tools is not None:
+        reset_warnings = getattr(tools, "reset_mupdf_warnings", None)
+        if callable(reset_warnings):
+            reset_warnings()
+        display_errors = getattr(tools, "mupdf_display_errors", None)
+        display_warnings = getattr(tools, "mupdf_display_warnings", None)
+        if callable(display_errors):
+            old_display_errors = bool(display_errors())
+            display_errors(False)
+        if callable(display_warnings):
+            old_display_warnings = bool(display_warnings())
+            display_warnings(False)
+    try:
+        with pymupdf.open(pdf_path) as doc:
+            pages = [page.get_text("text") for page in doc]
+        diagnostics = _collect_mupdf_diagnostics(tools)
+        return "\n\n".join(pages), diagnostics
+    finally:
+        if tools is not None:
+            display_errors = getattr(tools, "mupdf_display_errors", None)
+            display_warnings = getattr(tools, "mupdf_display_warnings", None)
+            if old_display_errors is not None and callable(display_errors):
+                display_errors(old_display_errors)
+            if old_display_warnings is not None and callable(display_warnings):
+                display_warnings(old_display_warnings)
+
+
+def _collect_mupdf_diagnostics(tools: object | None) -> dict[str, list[str]]:
+    if tools is None:
+        return {"known_nonfatal": [], "unknown": []}
+    warnings_fn = getattr(tools, "mupdf_warnings", None)
+    if not callable(warnings_fn):
+        return {"known_nonfatal": [], "unknown": []}
+    raw = str(warnings_fn() or "")
+    known: list[str] = []
+    unknown: list[str] = []
+    for line in raw.splitlines():
+        clean = line.strip()
+        if not clean:
+            continue
+        category = _classify_mupdf_diagnostic(clean)
+        if category:
+            if category not in known:
+                known.append(category)
+        else:
+            unknown.append(clean)
+    return {"known_nonfatal": known, "unknown": unknown}
+
+
+def _classify_mupdf_diagnostic(message: str) -> str:
+    lower = message.lower()
+    if "screen annotations" in lower or lower == "cannot create appearance stream":
+        return "screen_annotation_appearance_stream"
+    if "bogus font ascent/descent values" in lower or lower.startswith("... repeated "):
+        return "bogus_font_metrics"
+    return ""
 
 
 def fetch_arxiv_tex(
@@ -416,6 +484,7 @@ def fetch_and_cache_source(
     per_source_urls: dict[str, dict[str, list[str]]] = {}
     text_chars: dict[str, int] = {}
     errors: dict[str, str] = {}
+    diagnostics: dict[str, object] = {}
 
     # --- 1. arXiv flattened TeX ----------------------------------------
     tex_path = paper_dir / "paper.tex"
@@ -520,6 +589,8 @@ def fetch_and_cache_source(
         text_chars["pdftxt"] = len(pdf_text)
         if pdf_res.get("source_url"):
             source_files["pdf_source_url"] = pdf_res["source_url"]
+        if pdf_res.get("diagnostics"):
+            diagnostics["pdf"] = pdf_res["diagnostics"]
     else:
         if pdf_res["error"]:
             errors["pdf"] = pdf_res["error"]
@@ -558,6 +629,7 @@ def fetch_and_cache_source(
         "per_source_urls": per_source_urls,
         "text_chars": text_chars,
         "errors": errors,
+        "diagnostics": diagnostics,
     }
 
 

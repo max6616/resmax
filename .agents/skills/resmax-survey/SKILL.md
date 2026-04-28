@@ -43,7 +43,7 @@ PYTHONPATH=.agents/skills/resmax-survey/scripts python3 -m resmax_survey_v2 comp
   --out-dir literature_research/<direction_slug>
 ```
 
-`compile-spec` 只写 `survey_v2/spec/query_planner_request.json` 和 `query_planner_prompt.md`，不得自动生成 `query_families.jsonl`。执行 skill 的主 agent 必须读取 `query_planner_prompt.md`，调用一个 subagent 只生成 query plan，不允许 subagent 检索。subagent 输出必须保存为 `survey_v2/spec/query_planner_agent_output.json`，再用校验命令包装成最终 `query_families.jsonl`；校验失败必须停止，不得回退到规则 query 或旧 anchor 逻辑。
+`compile-spec` 只写 spec 阶段产物：`survey_v2/spec/research_spec.json`、`source_policy.json`、`query_planner_request.json` 和 `query_planner_prompt.md`；不得自动生成 `query_families.jsonl`。执行 skill 的主 agent 必须读取 `query_planner_prompt.md`，调用一个 subagent 只生成 query plan，不允许 subagent 检索。subagent 输出必须保存为 `survey_v2/spec/query_planner_agent_output.json`，再用校验命令包装成最终 `query_families.jsonl`；校验失败必须停止，不得回退到规则 query 或旧 anchor 逻辑。
 
 ```bash
 PYTHONPATH=.agents/skills/resmax-survey/scripts python3 -m resmax_survey_v2 plan-queries \
@@ -112,7 +112,14 @@ Markdown files are display-only. JSON/JSONL/CSV plus manifest hashes are the dow
 
 - 只处理 selected subdirection 的 top candidates；不要对全库做 full-text 解析。
 - 生产 source cache 写入 `paper_database/source_cache/<safe_paper_id>/`；单次调研目录只保存引用、manifest hash 和 reports。
-- Source 解析先复用全局 cache，再尝试官方/OA/arXiv/OpenReview/DOI/PDF/title-only search。若生产 `build-pack` 在 G2 source gate 失败，必须读取 `source_materialization_report.json` 中的 `web_search_replenishment`，对每篇缺失 source 执行合法通用 web search（搜索引擎/浏览器检索官方项目页、publisher open PDF、arXiv/OpenReview、作者主页、机构库、GitHub release 等公开来源），并把可用全文补入全局 source cache 后重跑；只有通用 web search 也无法获得 readable source 时，才停下询问用户是否切换子方向、提供 manual/MinerU cache、显式批准 Sci-Hub，或显式允许 abstract fallback。
+- Source 解析先复用全局 cache，再尝试官方/OA/arXiv/OpenReview/DOI/PDF/title-only search。若生产 `build-pack` 在 G2 source gate 失败，必须读取 `source_materialization_report.json` 中的 `web_search_replenishment`，对每篇缺失 source 执行合法通用 web search（搜索引擎/浏览器检索官方项目页、publisher open PDF、arXiv/OpenReview、作者主页、机构库、GitHub release 等公开来源），并把可用全文补入全局 source cache。补入 cache 后用下列命令记录公开来源 provenance，再重跑 `build-pack`；只有通用 web search 也无法获得 readable source 时，才停下询问用户是否切换子方向、提供 manual/MinerU cache、显式批准 Sci-Hub，或显式允许 abstract fallback。
+
+```bash
+PYTHONPATH=.agents/skills/resmax-survey/scripts python3 -m resmax_survey_v2 record-source-replenishment \
+  --pack literature_research/<direction_slug>/research_pack \
+  --paper-id <paper_id> \
+  --source-url <legal_public_source_url>
+```
 - Sci-Hub 默认关闭；只有用户显式批准才可启用。
 - 无法 materialize readable source 时，必须写 missing/source reports 和 web search 补源记录；生产运行不得把 OA/title-only resolver 失败等同于已完成通用 web search。
 - `abstract_fallback` 只有显式批准后才能继续，且只能作为 weak/degraded evidence。

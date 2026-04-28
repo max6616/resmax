@@ -5,6 +5,8 @@ import json
 from pathlib import Path
 from typing import Any
 
+from .fs_hygiene import remove_known_os_metadata
+
 
 BROAD_CANDIDATE_FIELDS = [
     "paper_id",
@@ -76,6 +78,7 @@ def write_macro_outputs(
     roi_rows: list[dict[str, Any]],
     manifest: dict[str, Any],
 ) -> None:
+    remove_known_os_metadata(out_dir)
     macro_dir = out_dir / "survey_v2" / "macro"
     macro_dir.mkdir(parents=True, exist_ok=True)
     _write_csv(macro_dir / "broad_candidates.csv", BROAD_CANDIDATE_FIELDS, candidates)
@@ -87,6 +90,7 @@ def write_macro_outputs(
         encoding="utf-8",
     )
     _write_json(out_dir / "survey_v2" / "manifest.json", manifest)
+    remove_known_os_metadata(out_dir)
 
 
 def _write_csv(path: Path, fields: list[str], rows: list[dict[str, Any]]) -> None:

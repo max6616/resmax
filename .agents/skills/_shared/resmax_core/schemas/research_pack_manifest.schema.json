@@ -41,6 +41,7 @@
               "coverage_report",
               "field_map",
               "source_materialization_report",
+              "source_replenishment_log",
               "reviewer_pressure_notes",
               "paper_roles",
               "baseline_matrix",

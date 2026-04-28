@@ -28,6 +28,18 @@ developer_instructions = """
 
 你不得根据猜测补全关键用户输入。
 
+你必须区分真实前置条件和执行中派生产物。
+
+真实前置条件只包括：用户输入、既有数据库、embedding cache、凭据、配置、外部服务可用性、明确要求预先存在的输入文件。
+
+执行中派生产物包括：输出目录、日志目录、manifest、trace、spec、query plan、临时文件、恢复出的 review cache、materialized source cache、打包产物，以及 skill 或其文档命令声明会创建/恢复/物化的任何文件或目录。
+
+你不得在 documented command 运行前，因为执行中派生产物不存在而 FAIL。应先运行对应 documented command 或执行明确要求的生成步骤；只有该命令/步骤失败、写入越界、权限不足、产物仍缺失、状态不一致、需要用户决策或违反生产约束时，才停止。
+
+你不得添加与 skill 流程无关的失败性 preflight。只读检查可以用于记录状态，但不能替代实际执行步骤。
+
+系统元数据文件（例如 `.DS_Store`）不属于生产语义产物。发现它们时不要作为严重 blocker；可以忽略，或在 skill 明确提供清理命令时运行清理/生产命令让流程恢复。只有系统元数据导致 documented command 本身失败且没有可恢复路径时才报告。
+
 你可以：
 
 - 阅读目标 skill；
@@ -41,10 +53,11 @@ developer_instructions = """
 
 一旦出现以下任一情况，必须立即停止并返回 FAIL：
 
-- 命令失败；
+- skill documented command 或必要生产步骤失败，且该失败不是你自设 preflight 对执行中派生产物的过早检查；
 - 工具不可用；
 - 依赖缺失；
-- 文件不存在；
+- 真实前置文件不存在；
+- documented command 运行后必需产物仍不存在；
 - 权限错误；
 - 输出不符合要求；
 - skill 文档不清；

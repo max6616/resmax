@@ -35,7 +35,9 @@ Rules:
 4. Include synonyms and spelling variants.
 5. For each role, generate 2-4 queries.
 6. Each query must have required concept groups and boost phrases.
-7. Output strict JSON matching the schema.
+7. Each query must be traceable: semantic_text plus generation_reason must contain at least two meaningful terms from raw_intent or search_profile. Prefer core_topic/entities such as 4DGS, 3DGS, Gaussian Splatting, dynamic scenes, editing, real-time, feed-forward, temporal consistency, action editing, public datasets, and benchmark terms when present.
+8. Avoid generic queries like "evaluation metrics for 3D editing" unless the query also carries the user's concrete domain or objective terms.
+9. Output strict JSON matching the schema.
 """
 
 ROLE_INFORMATION_NEEDS = {
@@ -64,6 +66,7 @@ def build_query_planner_request(research_spec: dict[str, Any]) -> dict[str, Any]
         "planner_prompt": AGENT_QUERY_PLANNER_PROMPT,
         "raw_intent": raw_intent,
         "search_profile": search_profile,
+        "traceability_terms": _planner_traceability_terms(search_profile),
         "target_roles": list(ROLE_ORDER),
         "role_information_needs": ROLE_INFORMATION_NEEDS,
         "output_contract": {
@@ -97,6 +100,8 @@ def build_query_planner_request(research_spec: dict[str, Any]) -> dict[str, Any]
                 "Return only JSON; no markdown fences or prose.",
                 "Generate 2-4 queries per role.",
                 "Every query must have semantic_text, keyword_query.required_concepts, keyword_query.boost_phrases, and generation_reason.",
+                "Every query must be traceable to raw_intent/search_profile: semantic_text plus generation_reason should include at least two meaningful traceability terms from core_topic, entities, desired_properties, constraints, or raw_intent.",
+                "For broad benchmark/evaluation queries, include the concrete target domain or desired property (for example 4DGS/Gaussian/dynamic scene editing, temporal consistency, action editing accuracy, public benchmarks, qualitative visualization).",
                 "Do not perform retrieval.",
                 "Do not include noisy resource numbers such as GPU count, GPU model, or timeline unless retrieval meaning depends on them.",
             ],
@@ -214,6 +219,7 @@ def _render_subagent_prompt(request: dict[str, Any]) -> str:
                 {
                     "raw_intent": request["raw_intent"],
                     "search_profile": request["search_profile"],
+                    "traceability_terms": request["traceability_terms"],
                     "target_roles": request["target_roles"],
                     "role_information_needs": request["role_information_needs"],
                     "output_contract": request["output_contract"],
@@ -344,11 +350,35 @@ def _normalize_list(values: Any) -> list[str]:
 
 def _traces_to_intent(research_spec: dict[str, Any], semantic_text: str, generation_reason: str) -> bool:
     text = f"{semantic_text} {generation_reason}".lower()
-    raw_terms = _meaningful_terms(str(research_spec.get("raw_intent", "")))
+    terms = _traceability_terms(research_spec)
+    return sum(1 for term in terms if _term_in_text(term, text)) >= 2
+
+
+def _traceability_terms(research_spec: dict[str, Any]) -> list[str]:
     profile = research_spec.get("search_profile", {})
-    profile_terms = _meaningful_terms(" ".join(str(value) for value in profile.get("entities", [])))
-    terms = raw_terms + profile_terms
-    return sum(1 for term in terms if term in text) >= 2
+    if not isinstance(profile, dict):
+        profile = {}
+    chunks = [
+        str(research_spec.get("raw_intent", "")),
+        str(profile.get("core_topic", "")),
+        " ".join(str(value) for value in profile.get("entities", []) if value),
+        " ".join(str(value) for value in profile.get("desired_properties", []) if value),
+        " ".join(str(value) for value in profile.get("constraints", []) if value),
+    ]
+    terms: list[str] = []
+    for chunk in chunks:
+        terms.extend(_meaningful_terms(chunk))
+    terms.extend(_expanded_trace_terms(terms))
+    return _dedupe_terms(terms)
+
+
+def _planner_traceability_terms(search_profile: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "core_topic": search_profile.get("core_topic", ""),
+        "entities": search_profile.get("entities", []),
+        "desired_properties": search_profile.get("desired_properties", []),
+        "constraints": search_profile.get("constraints", []),
+    }
 
 
 def _meaningful_terms(text: str) -> list[str]:
@@ -369,14 +399,51 @@ def _meaningful_terms(text: str) -> list[str]:
         "target",
         "venue",
         "budget",
+        "gpu",
+        "gpus",
+        "rtx",
+        "time",
         "timeline",
+        "week",
+        "weeks",
     }
     terms = []
     for part in re.split(r"[^A-Za-z0-9_+-]+", text):
         clean = part.strip().lower()
-        if len(clean) >= 3 and clean not in stop and not _has_noisy_resource_terms(clean):
+        if (len(clean) >= 3 or clean in {"3d", "4d"}) and clean not in stop and not _has_noisy_resource_terms(clean):
             terms.append(clean)
     return terms
+
+
+def _expanded_trace_terms(terms: list[str]) -> list[str]:
+    expanded: list[str] = []
+    term_set = set(terms)
+    if "4dgs" in term_set:
+        expanded.extend(["4d", "gaussian", "splatting"])
+    if "3dgs" in term_set:
+        expanded.extend(["3d", "gaussian", "splatting"])
+    if "feed" in term_set and "forward" in term_set:
+        expanded.append("feed-forward")
+    if "real" in term_set and "time" in term_set:
+        expanded.append("real-time")
+    return expanded
+
+
+def _dedupe_terms(terms: list[str]) -> list[str]:
+    seen: set[str] = set()
+    result: list[str] = []
+    for term in terms:
+        clean = term.strip().lower()
+        if clean and clean not in seen:
+            seen.add(clean)
+            result.append(clean)
+    return result
+
+
+def _term_in_text(term: str, text: str) -> bool:
+    if re.fullmatch(r"[a-z0-9_+-]+", term):
+        return bool(re.search(rf"(?<![a-z0-9_+-]){re.escape(term)}(?![a-z0-9_+-])", text))
+    return term in text
 
 
 def _has_noisy_resource_terms(text: str) -> bool:
